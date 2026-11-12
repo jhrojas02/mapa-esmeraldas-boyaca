@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zonas de potencial esmeraldífero · Occidente de Boyacá</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="title">
+    <h1>Zonas de potencial esmeraldífero</h1>
+    <p>Occidente de Boyacá · versión preliminar (Modelo A)</p>
+  </div>
+  <button id="toggle-panel" aria-label="Mostrar u ocultar el panel">☰</button>
+</header>
+
+<main>
+  <aside id="panel">
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="buscar">Buscar</button>
+      <button class="tab" data-tab="municipios">Municipios</button>
+      <button class="tab" data-tab="ayuda">Cómo leer el mapa</button>
+    </nav>
+
+    <section id="tab-buscar" class="tab-body active">
+      <label for="q" class="lbl">¿En qué pueblo o vereda vive?</label>
+      <div class="search">
+        <input id="q" type="search" placeholder="Ej.: Muzo, Otanche, Coscuez…" autocomplete="off">
+        <ul id="sugerencias" class="sugerencias" hidden></ul>
+      </div>
+      <button id="ubicacion" class="btn">📍 Usar mi ubicación</button>
+      <p class="hint">También puede tocar cualquier punto del mapa.</p>
+      <div id="detalle"></div>
+    </section>
+
+    <section id="tab-municipios" class="tab-body">
+      <p class="hint">Ordenados por área de potencial alto. Toque uno para acercarse.</p>
+      <ul id="lista-municipios" class="lista"></ul>
+    </section>
+
+    <section id="tab-ayuda" class="tab-body">
+      <h3>Qué significan los colores</h3>
+      <ul id="leyenda" class="leyenda"></ul>
+      <h3>Cómo se hizo</h3>
+      <p>El mapa divide la región en cuadros de 250 m. Para cada cuadro, un modelo estadístico compara la geología
+        (sobre todo la Formación Muzo, la roca donde se forma la esmeralda), las fallas, el relieve, la vegetación vista
+        desde satélite y la química de los sedimentos de las quebradas con lo que hay donde hoy existen minas de esmeralda.</p>
+      <p><b>“Potencial alto”</b> quiere decir que el cuadro se parece mucho a donde ya hay minas. <b>No garantiza</b> que
+        haya esmeralda. La <b>confianza</b> dice qué tan seguro está el modelo.</p>
+      <p>En “áreas de potencial alto cercanas” solo se listan áreas de al menos 0,25 km² (4 cuadros juntos).</p>
+      <p><b>“No evaluado”</b> es la Formación Rosablanca (tipo Peñas Blancas): ahí la esmeralda se forma de otra manera
+        y el modelo no sabe predecirla, así que no se afirma nada.</p>
+      <p>El mapa <b>no muestra la ubicación de minas</b>. Es una versión preliminar de una tesis de Ciencia de Datos
+        (Universidad Externado de Colombia) y todavía no incluye el conocimiento de los mineros.</p>
+      <p class="meta" id="meta"></p>
+    </section>
+  </aside>
+
+  <div id="map"></div>
+</main>
+
+<div id="cargando">Cargando el mapa…</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
