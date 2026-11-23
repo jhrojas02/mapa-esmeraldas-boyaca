@@ -1,1 +1,1 @@
-{"modelo": "Modelo A (sin conocimiento local)", "inferencia": "Variacional (fullrank_advi)", "fecha": "2026-11-11", "celdas": 30478, "res_m": 250}
+{"modelo": "Modelo A v2 (sin conocimiento local)", "inferencia": "Variacional (fullrank_advi)", "fecha": "2026-11-23", "celdas": 190352, "res_m": 100, "corredores": {"km2_prioritario": 1.8387, "km2_secundario": 24.0948}}

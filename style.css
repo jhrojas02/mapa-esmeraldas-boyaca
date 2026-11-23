@@ -79,6 +79,17 @@ main { flex: 1; display: flex; min-height: 0; }
 #cargando { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
   background: #fffd; font-size: 1.1rem; z-index: 9999; }
 
+.razones ul, .caja ul { margin: 4px 0 0; padding-left: 18px; }
+.razones { margin-top: 8px; font-size: .9rem; }
+.caja.corredor.prioritario { border-color: #7a0177; background: #fde0ef; }
+.caja.corredor.secundario { border-color: #b8860b; background: #fff7d1; }
+.caja.aviso { border-color: #d7301f; background: #fff1ee; }
+.coords { font-size: .8rem; color: var(--gris); margin: 2px 0 4px; }
+.guia { padding-left: 18px; }
+.guia li { margin: 6px 0; }
+#tab-campo h3, #tab-ayuda h3 { margin: 14px 0 6px; font-size: 1rem; }
+.leyenda-mapa .sep { border-top: 1px solid #ddd; margin: 4px 0; }
+
 @media (max-width: 760px) {
   #toggle-panel { display: block; }
   main { flex-direction: column-reverse; }
@@ -87,3 +98,4 @@ main { flex: 1; display: flex; min-height: 0; }
   #panel.oculto { display: none; }
   .leyenda-mapa { display: none; }
 }
+.pixelado { image-rendering: pixelated; image-rendering: crisp-edges; }

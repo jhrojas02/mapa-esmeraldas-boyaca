@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Zonas de potencial esmeraldífero · Occidente de Boyacá</title>
+<title>Guía de exploración esmeraldífera · Occidente de Boyacá</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
   <div class="title">
-    <h1>Zonas de potencial esmeraldífero</h1>
-    <p>Occidente de Boyacá · versión preliminar (Modelo A)</p>
+    <h1>Guía de exploración esmeraldífera</h1>
+    <p>Occidente de Boyacá · versión preliminar 2 (Modelo A)</p>
   </div>
   <button id="toggle-panel" aria-label="Mostrar u ocultar el panel">☰</button>
 </header>
@@ -21,7 +21,8 @@
     <nav class="tabs" role="tablist">
       <button class="tab active" data-tab="buscar">Buscar</button>
       <button class="tab" data-tab="municipios">Municipios</button>
-      <button class="tab" data-tab="ayuda">Cómo leer el mapa</button>
+      <button class="tab" data-tab="campo">Guía de campo</button>
+      <button class="tab" data-tab="ayuda">Cómo leer</button>
     </nav>
 
     <section id="tab-buscar" class="tab-body active">
@@ -32,6 +33,7 @@
       </div>
       <button id="ubicacion" class="btn">📍 Usar mi ubicación</button>
       <p class="hint">También puede tocar cualquier punto del mapa.</p>
+      <p class="hint" id="aviso-zoom">Acérquese al mapa para ver los <b>corredores de exploración</b>, las fallas y los pliegues.</p>
       <div id="detalle"></div>
     </section>
 
@@ -40,16 +42,54 @@
       <ul id="lista-municipios" class="lista"></ul>
     </section>
 
+    <section id="tab-campo" class="tab-body">
+      <h3>Qué buscar en el terreno</h3>
+      <p class="hint">Señales que acompañan a la esmeralda en el cinturón de Muzo y Coscuez, según los estudios geológicos
+        de la región. Ninguna sola es prueba; varias juntas en un corredor sí son buena señal.</p>
+      <ul class="guia">
+        <li><b>Lutita negra</b> (roca oscura, en capas finas, que mancha los dedos) de la Formación Muzo o Paja. Es la roca donde se forma la esmeralda.</li>
+        <li><b>Vetas blancas de calcita</b>, a veces con <b>dolomita</b> (tono crema) y <b>pirita</b> (cristales dorados, “oro de tontos”). Las vetas con esmeralda casi siempre van con calcita.</li>
+        <li><b>Albitita</b>: roca clara, blanquecina o grisácea, más dura que la lutita, a lo largo de fallas. Indica que pasaron los fluidos que forman la esmeralda.</li>
+        <li><b>Brechas</b>: roca rota y vuelta a pegar por vetas blancas, en zonas de falla o en la cresta de los pliegues.</li>
+        <li><b>Parisita</b> (cristales pardos alargados) y <b>cuarzo</b> en las vetas: acompañan a la esmeralda en Muzo y Coscuez.</li>
+        <li><b>Cresta de los pliegues</b> (donde las capas cambian de inclinación) y <b>cruces de fallas</b>: allí la roca se fractura y los fluidos circulan.</li>
+        <li>Direcciones de vetas conocidas: más o menos <b>noroeste (N40°W)</b> y <b>norte-noreste (N10°E)</b>.</li>
+      </ul>
+      <h3>Cómo usar los corredores</h3>
+      <ol class="guia">
+        <li>Busque su vereda o use su ubicación y acérquese hasta ver los corredores (rosado = prioritario, amarillo = secundario).</li>
+        <li>Toque un corredor: la app dice por qué está marcado (pliegue, falla o cruce de fallas).</li>
+        <li>Recorra el corredor por quebradas y cortes de camino, donde la roca se ve sin vegetación, buscando las señales de arriba.</li>
+        <li>La capa “Profundidad de la Fm. Muzo” (menú de capas, arriba a la derecha) indica si la roca favorable está en superficie o enterrada.</li>
+      </ol>
+      <h3>Antes de excavar</h3>
+      <ul class="guia">
+        <li>Revise la capa <b>Títulos mineros (ANM)</b>: trabajar dentro de un título ajeno sin permiso es ilegal.</li>
+        <li>No trabaje solo, evite laderas inestables y túneles sin soporte, y no use explosivos sin autorización.</li>
+        <li>El mapa es una guía con error de 50 a 100 m: lo que se ve en el terreno manda.</li>
+      </ul>
+    </section>
+
     <section id="tab-ayuda" class="tab-body">
       <h3>Qué significan los colores</h3>
       <ul id="leyenda" class="leyenda"></ul>
+      <h3>Corredores de exploración</h3>
+      <p>Al acercarse aparecen franjas a 30 m dentro de las zonas favorables: roca favorable (Fm. Muzo o Paja, o junto a su
+        contacto) cerca de la <b>cresta de un pliegue</b>, de una <b>falla</b> o de un <b>cruce de fallas</b>. Son
+        <b>prioritarios</b> (rosado) si cumplen dos o más de esas condiciones en una zona de potencial alto, y
+        <b>secundarios</b> (amarillo) si cumplen menos. Salen de la geología publicada, no de la ubicación de minas.</p>
+      <h3>Bajo tierra</h3>
+      <p>Donde la Formación Capotes cubre a la Formación Muzo (sobre todo en Muzo, Quípama y Maripí), la app estima a qué
+        profundidad estaría la Muzo usando la inclinación de las capas medida en la región. Es un cálculo aproximado (orden
+        de magnitud), no un estudio para perforar.</p>
       <h3>Cómo se hizo</h3>
-      <p>El mapa divide la región en cuadros de 250 m. Para cada cuadro, un modelo estadístico compara la geología
-        (sobre todo la Formación Muzo, la roca donde se forma la esmeralda), las fallas, el relieve, la vegetación vista
-        desde satélite y la química de los sedimentos de las quebradas con lo que hay donde hoy existen minas de esmeralda.</p>
+      <p>El mapa divide la región en cuadros de 100 m. Para cada cuadro, un modelo estadístico compara la geología
+        (sobre todo la Formación Muzo, la roca donde se forma la esmeralda), las fallas y los pliegues, el relieve del
+        terreno sin bosque (FABDEM), la vegetación vista desde satélite y la química de los sedimentos de las quebradas
+        con lo que hay donde hoy existen minas de esmeralda. Al tocar un punto, la app dice qué es lo que más pesa allí.</p>
       <p><b>“Potencial alto”</b> quiere decir que el cuadro se parece mucho a donde ya hay minas. <b>No garantiza</b> que
         haya esmeralda. La <b>confianza</b> dice qué tan seguro está el modelo.</p>
-      <p>En “áreas de potencial alto cercanas” solo se listan áreas de al menos 0,25 km² (4 cuadros juntos).</p>
+      <p>En “áreas de potencial alto cercanas” solo se listan áreas de al menos 0,25 km².</p>
       <p><b>“No evaluado”</b> es la Formación Rosablanca (tipo Peñas Blancas): ahí la esmeralda se forma de otra manera
         y el modelo no sabe predecirla, así que no se afirma nada.</p>
       <p>El mapa <b>no muestra la ubicación de minas</b>. Es una versión preliminar de una tesis de Ciencia de Datos
@@ -64,6 +104,7 @@
 <div id="cargando">Cargando el mapa…</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// Zonas de potencial esmeraldífero · Occidente de Boyacá (Modelo A)
+// Guía de exploración esmeraldífera · Occidente de Boyacá (Modelo A v2)
 // Página estática: lee los datos de data/ y no envía nada a ningún servidor.
 "use strict";
 
@@ -12,61 +12,151 @@ const EXPLICACION = [
   "Con lo que se sabe hoy, es poco probable que sea favorable.",
   "Formación Rosablanca (tipo Peñas Blancas): el modelo no sabe evaluarla.",
 ];
+const CRITERIOS = {
+  C: "cerca de la cresta de un pliegue (anticlinal) en roca favorable",
+  F: "cerca de una falla",
+  X: "cerca de un cruce de fallas",
+};
+const ESTILO_CORREDOR = {
+  prioritario: { color: "#7a0177", fillColor: "#f768a1", weight: 1.5, fillOpacity: 0.55 },
+  secundario: { color: "#b8860b", fillColor: "#ffd92f", weight: 1, fillOpacity: 0.4 },
+};
+const ESTILO_ESTRUCTURA = {
+  falla: { color: "#111", weight: 2, dashArray: "6 4" },
+  falla_inversa: { color: "#d7301f", weight: 2.5 },
+  charnela: { color: "#6a3d9a", weight: 3 },
+  contacto_muzo_capotes: { color: "#ffffff", weight: 2, dashArray: "2 4" },
+};
+const NOMBRE_ESTRUCTURA = {
+  falla: "Falla", falla_inversa: "Falla inversa", charnela: "Cresta de anticlinal en roca favorable",
+  contacto_muzo_capotes: "Contacto Fm. Muzo – Fm. Capotes",
+};
 const RADIO_KM = 5;
-const AREA_MIN_KM2 = 0.25;   // áreas de potencial alto de al menos 4 cuadros; los cuadros sueltos no se listan
+const AREA_MIN_KM2 = 0.25;
+const ZOOM_DETALLE = 13;   // desde aquí se muestran corredores y estructuras
 
-let D = {};               // datos cargados
-let map, capaZonas, capaMunicipios, marcadorSel, circuloSel, capaCercanas;
+let D = {}, G = {};       // datos cargados y grilla decodificada
+let map, capaZonas, capaMunicipios, capaCorredores, capaEstructuras, capaTitulos, capaProf;
+let marcadorSel, circuloSel, capaCercanas;
 
 // ---------------------------------------------------------------- utilidades
 const $ = (s) => document.querySelector(s);
 const norm = (s) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const R = 6371;
-function distKm(a, b, c, d) {
-  const r = Math.PI / 180, dl = (c - a) * r, dn = (d - b) * r;
-  const h = Math.sin(dl / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin(dn / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-function rumbo(a, b, c, d) {
-  const r = Math.PI / 180;
-  const y = Math.sin((d - b) * r) * Math.cos(c * r);
-  const x = Math.cos(a * r) * Math.sin(c * r) - Math.sin(a * r) * Math.cos(c * r) * Math.cos((d - b) * r);
-  const g = (Math.atan2(y, x) / r + 360) % 360;
-  return ["norte", "nororiente", "oriente", "suroriente", "sur", "suroccidente", "occidente", "noroccidente"][Math.round(g / 45) % 8];
-}
 const fmtKm = (k) => (k < 1 ? `${Math.round(k * 1000)} m` : `${k.toFixed(1).replace(".", ",")} km`);
-const color = (z) => D.celdas.colores[z];
+const fmtNum = (v, d = 1) => v.toFixed(d).replace(".", ",");
+const RUMBOS = ["norte", "nororiente", "oriente", "suroriente", "sur", "suroccidente", "occidente", "noroccidente"];
+const color = (z) => G.colores[z];
 function chip(z) {
   const oscuro = z === 0 || z === 4;
   return `<span class="zona-chip" style="background:${color(z)};color:${oscuro ? "#fff" : "#222"}">${ZONAS_CORTAS[z]}</span>`;
+}
+function b64(s, Tipo = Uint8Array) {
+  const bin = atob(s), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return new Tipo(u8.buffer);
+}
+
+// ---------------------------------------------------------------- grilla (EPSG:9377)
+const aXY = (lat, lon) => proj4(G.proj4, [lon, lat]);
+const aLatLon = (x, y) => { const [lon, lat] = proj4(G.proj4).inverse([x, y]); return [lat, lon]; };
+const centro = (i) => [G.x0 + ((i % G.W) + 0.5) * G.res, G.y0 - (Math.floor(i / G.W) + 0.5) * G.res];
+function indice(lat, lon) {
+  const [x, y] = aXY(lat, lon);
+  const c = Math.floor((x - G.x0) / G.res), r = Math.floor((G.y0 - y) / G.res);
+  if (r < 0 || r >= G.H || c < 0 || c >= G.W) return -1;
+  const i = r * G.W + c;
+  return G.z[i] === 255 ? -1 : i;
+}
+function rumbo(x0, y0, x1, y1) {
+  const g = (Math.atan2(x1 - x0, y1 - y0) * 180 / Math.PI + 360) % 360;
+  return RUMBOS[Math.round(g / 45) % 8];
+}
+function resumenRadio(lat, lon, km) {
+  const [x, y] = aXY(lat, lon), cont = [0, 0, 0, 0, 0, 0], m = km * 1000, n = Math.ceil(m / G.res);
+  const c0 = Math.floor((x - G.x0) / G.res), r0 = Math.floor((G.y0 - y) / G.res);
+  for (let r = Math.max(0, r0 - n); r <= Math.min(G.H - 1, r0 + n); r++)
+    for (let c = Math.max(0, c0 - n); c <= Math.min(G.W - 1, c0 + n); c++) {
+      const i = r * G.W + c, z = G.z[i];
+      if (z === 255) continue;
+      const [cx, cy] = centro(i);
+      if ((cx - x) ** 2 + (cy - y) ** 2 <= m * m) cont[z]++;
+    }
+  return cont;
+}
+function areasCercanas(lat, lon) {
+  // Distancia al cuadro más cercano de cada área (no a su centro): un área grande cuenta desde su borde.
+  const [x, y] = aXY(lat, lon), best = new Map(), aqui = G.a[indice(lat, lon)] || 0;
+  for (const i of G.celdasArea) {
+    const [cx, cy] = centro(i), d = Math.hypot(cx - x, cy - y), id = G.a[i], b = best.get(id);
+    if (!b || d < b.d) best.set(id, { d, i });
+  }
+  return D.areas.filter((a) => a.km2 >= AREA_MIN_KM2 && best.has(a.id)).map((a) => {
+    const b = best.get(a.id), [cx, cy] = centro(b.i), [la, lo] = aLatLon(cx, cy);
+    return { ...a, d: b.d / 1000, dir: rumbo(x, y, cx, cy), latC: la, lonC: lo, dentro: a.id === aqui };
+  }).sort((a, b) => a.d - b.d);
+}
+const dondeTxt = (a) => (a.dentro ? "aquí mismo" : `${fmtKm(Math.max(a.d, 0.1))} al ${a.dir}`);
+
+// Punto dentro de polígono (GeoJSON Polygon / MultiPolygon, con huecos)
+function enAnillo(lon, lat, anillo) {
+  let dentro = false;
+  for (let i = 0, j = anillo.length - 1; i < anillo.length; j = i++) {
+    const [xi, yi] = anillo[i], [xj, yj] = anillo[j];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) dentro = !dentro;
+  }
+  return dentro;
+}
+function enPoligono(lon, lat, geom) {
+  const polis = geom.type === "Polygon" ? [geom.coordinates] : geom.type === "MultiPolygon" ? geom.coordinates : [];
+  return polis.some((p) => enAnillo(lon, lat, p[0]) && !p.slice(1).some((h) => enAnillo(lon, lat, h)));
+}
+function buscarEn(fc, lat, lon) {
+  return fc.features.filter((f) => {
+    const b = f._bbox || (f._bbox = L.geoJSON(f).getBounds());
+    return b.contains([lat, lon]) && enPoligono(lon, lat, f.geometry);
+  });
 }
 
 // ---------------------------------------------------------------- carga
 async function cargar() {
   const get = (f) => fetch(`data/${f}`).then((r) => { if (!r.ok) throw new Error(f); return r.json(); });
-  const [celdas, zonas, municipios, poblados, areas, meta] = await Promise.all([
-    get("celdas.json"), get("zonas.geojson"), get("municipios.geojson"), get("poblados.json"),
-    get("areas_alto.json"), get("meta.json")]);
-  D = { celdas, zonas, municipios, poblados, areas, meta };
+  const [grilla, municipios, poblados, areas, meta, corredores, estructuras, titulos] = await Promise.all([
+    get("grilla.json"), get("municipios.geojson"), get("poblados.json"), get("areas_alto.json"),
+    get("meta.json"), get("corredores.geojson"), get("estructuras.geojson"), get("titulos.geojson")]);
+  D = { municipios, poblados, areas, meta, corredores, estructuras, titulos };
+  G = { ...grilla, z: b64(grilla.z), pa: b64(grilla.pa), pb: b64(grilla.pb), a: b64(grilla.a, Uint16Array),
+    r1: b64(grilla.r1), r2: b64(grilla.r2), prof: b64(grilla.prof), pmin: b64(grilla.pmin), pmax: b64(grilla.pmax) };
+  G.celdasArea = [];
+  for (let i = 0; i < G.a.length; i++) if (G.a[i]) G.celdasArea.push(i);
 }
 
 // ---------------------------------------------------------------- mapa
 function iniciarMapa() {
-  map = L.map("map", { zoomControl: true, preferCanvas: true });
+  map = L.map("map", { zoomControl: true, preferCanvas: true, maxZoom: 19 });
   const satelite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    { maxZoom: 18, attribution: "Imagen: Esri, Maxar, Earthstar Geographics" });
+    { maxZoom: 19, maxNativeZoom: 18, attribution: "Imagen: Esri, Maxar, Earthstar Geographics" });
   const calles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    { maxZoom: 18, attribution: "© OpenStreetMap" });
+    { maxZoom: 19, attribution: "© OpenStreetMap" });
   const topo = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-    { maxZoom: 17, attribution: "© OpenTopoMap (CC-BY-SA)" });
+    { maxZoom: 19, maxNativeZoom: 17, attribution: "© OpenTopoMap (CC-BY-SA)" });
   satelite.addTo(map);
 
-  capaZonas = L.geoJSON(D.zonas, {
-    style: (f) => ({ fillColor: color(f.properties.z), color: color(f.properties.z), weight: 0.4,
-      fillOpacity: f.properties.z === 2 ? 0.25 : 0.55 }),
+  capaZonas = L.imageOverlay("data/zonas.png", G.zonas_png_bounds, { opacity: 0.6, className: "pixelado" }).addTo(map);
+
+  capaCorredores = L.geoJSON(D.corredores, {
+    style: (f) => ESTILO_CORREDOR[f.properties.tipo],
+    onEachFeature: (f, l) => l.on("click", (e) => { L.DomEvent.stop(e); seleccionar(e.latlng.lat, e.latlng.lng, "Punto seleccionado en el mapa"); }),
+  });
+  capaEstructuras = L.geoJSON(D.estructuras, {
+    style: (f) => ESTILO_ESTRUCTURA[f.properties.tipo] || ESTILO_ESTRUCTURA.falla,
+    onEachFeature: (f, l) => l.bindTooltip(`${NOMBRE_ESTRUCTURA[f.properties.tipo] || "Falla"}${f.properties.nombre ? ": " + esc(f.properties.nombre) : ""}`, { sticky: true }),
+  });
+  capaTitulos = L.geoJSON(D.titulos, {
+    style: { color: "#00e5ff", weight: 1.5, fill: true, fillOpacity: 0.04, dashArray: "4 3" },
     interactive: false,
-  }).addTo(map);
+  });
+  capaProf = L.imageOverlay("data/profundidad_muzo.png", G.prof_png_bounds, { opacity: 0.8 });
 
   capaMunicipios = L.geoJSON(D.municipios, {
     style: { fill: false, color: "#ffffff", weight: 2, opacity: 0.9 },
@@ -76,64 +166,91 @@ function iniciarMapa() {
   }).addTo(map);
 
   capaCercanas = L.layerGroup().addTo(map);
-  L.control.layers({ "Satélite": satelite, "Calles": calles, "Relieve": topo },
-    { "Zonas de potencial": capaZonas, "Municipios": capaMunicipios }, { collapsed: true }).addTo(map);
+  const capas = {
+    "Zonas de potencial": capaZonas,
+    "Corredores de exploración (de cerca)": capaCorredores,
+    "Fallas, pliegues y contactos (de cerca)": capaEstructuras,
+    "Profundidad de la Fm. Muzo": capaProf,
+    "Títulos mineros (ANM)": capaTitulos,
+    "Municipios": capaMunicipios,
+  };
+  L.control.layers({ "Satélite": satelite, "Calles": calles, "Relieve": topo }, capas, { collapsed: true }).addTo(map);
   L.control.scale({ imperial: false }).addTo(map);
+
+  // Corredores y estructuras: solo de cerca (en la vista general serían ruido). El usuario puede apagarlos.
+  const quiere = { corr: true, est: true };
+  map.on("overlayadd", (e) => { if (e.layer === capaCorredores) quiere.corr = true; if (e.layer === capaEstructuras) quiere.est = true; });
+  map.on("overlayremove", (e) => { if (e.layer === capaCorredores && map.getZoom() >= ZOOM_DETALLE) quiere.corr = false;
+    if (e.layer === capaEstructuras && map.getZoom() >= ZOOM_DETALLE) quiere.est = false; });
+  const porZoom = () => {
+    const cerca = map.getZoom() >= ZOOM_DETALLE;
+    for (const [capa, k] of [[capaCorredores, "corr"], [capaEstructuras, "est"]]) {
+      if (cerca && quiere[k] && !map.hasLayer(capa)) capa.addTo(map);
+      if (!cerca && map.hasLayer(capa)) map.removeLayer(capa);
+    }
+    capaZonas.setOpacity(cerca ? 0.4 : 0.6);
+    $("#aviso-zoom").hidden = cerca;
+  };
+  map.on("zoomend", porZoom);
 
   const ley = L.control({ position: "bottomright" });   // se oculta en celulares (CSS)
   ley.onAdd = () => {
     const div = L.DomUtil.create("div", "leaflet-control leyenda-mapa");
-    div.innerHTML = ZONAS_CORTAS.map((n, z) => `<div><i style="background:${color(z)}"></i>${n}</div>`).join("");
+    div.innerHTML = ZONAS_CORTAS.map((n, z) => `<div><i style="background:${color(z)}"></i>${n}</div>`).join("") +
+      `<div class="sep"></div><div><i style="background:${ESTILO_CORREDOR.prioritario.fillColor};border-color:${ESTILO_CORREDOR.prioritario.color}"></i>Corredor prioritario</div>` +
+      `<div><i style="background:${ESTILO_CORREDOR.secundario.fillColor};border-color:${ESTILO_CORREDOR.secundario.color}"></i>Corredor secundario</div>`;
     return div;
   };
   ley.addTo(map);
 
   map.fitBounds(capaZonas.getBounds());
+  porZoom();
   map.on("click", (e) => seleccionar(e.latlng.lat, e.latlng.lng, "Punto seleccionado en el mapa"));
 }
 
-// ---------------------------------------------------------------- consultas
-function celdaEn(lat, lon) {
-  const c = D.celdas, maxKm = (c.res_m / 1000) * 0.75;
-  let mejor = -1, dmin = Infinity;
-  for (let i = 0; i < c.lat.length; i++) {
-    if (Math.abs(c.lat[i] - lat) > 0.01 || Math.abs(c.lon[i] - lon) > 0.01) continue;
-    const d = distKm(lat, lon, c.lat[i], c.lon[i]);
-    if (d < dmin) { dmin = d; mejor = i; }
-  }
-  return dmin <= maxKm ? mejor : -1;
-}
-function resumenRadio(lat, lon, km) {
-  const c = D.celdas, cont = [0, 0, 0, 0, 0, 0], dlat = km / 111;
-  for (let i = 0; i < c.lat.length; i++) {
-    if (Math.abs(c.lat[i] - lat) > dlat || Math.abs(c.lon[i] - lon) > dlat * 1.01) continue;
-    if (distKm(lat, lon, c.lat[i], c.lon[i]) <= km) cont[c.z[i]]++;
-  }
-  return cont;
-}
-function areasCercanas(lat, lon, n = 5) {
-  // Distancia al cuadro más cercano de cada área (no a su centro): así un área grande cuenta desde su borde.
-  const c = D.celdas, best = new Map();
-  for (let i = 0; i < c.a.length; i++) {
-    const id = c.a[i];
-    if (!id) continue;
-    const d = distKm(lat, lon, c.lat[i], c.lon[i]);
-    const b = best.get(id);
-    if (!b || d < b.d) best.set(id, { d, lat: c.lat[i], lon: c.lon[i] });
-  }
-  return D.areas.filter((a) => a.km2 >= AREA_MIN_KM2 && best.has(a.id)).map((a) => {
-    const b = best.get(a.id);
-    return { ...a, d: b.d, dir: rumbo(lat, lon, b.lat, b.lon), latC: b.lat, lonC: b.lon };
-  }).sort((a, b) => a.d - b.d).slice(0, n);
-}
-const dondeTxt = (a) => (a.d <= 0.2 ? "aquí mismo" : `${fmtKm(a.d)} al ${a.dir}`);
-function marcadorNumero(a, n, tip) {
+function marcadorNumero(lat, lon, n, tip) {
   const icon = L.divIcon({ className: "num", html: `<span>${n}</span>`, iconSize: [24, 24], iconAnchor: [12, 12] });
-  L.marker([a.lat, a.lon], { icon }).bindTooltip(tip).addTo(capaCercanas).on("click", () => map.flyTo([a.lat, a.lon], 14));
+  L.marker([lat, lon], { icon }).bindTooltip(tip).addTo(capaCercanas).on("click", () => map.flyTo([lat, lon], 15));
 }
 function barra(cont) {
   const tot = cont.reduce((a, b) => a + b, 0) || 1;
   return `<div class="barra">${cont.map((v, z) => v ? `<span style="width:${(100 * v) / tot}%;background:${color(z)}" title="${ZONAS_CORTAS[z]}"></span>` : "").join("")}</div>`;
+}
+
+// ---------------------------------------------------------------- cajas del detalle
+function cajaPunto(i) {
+  if (i < 0) return `<div class="caja">Este punto está fuera del área estudiada.</div>`;
+  const z = G.z[i];
+  let h = `<div class="caja"><h3>En este cuadro de ${G.res} m</h3>${chip(z)}<div>${EXPLICACION[z]}</div>`;
+  if (z !== 5) h += `<div class="hint">Probabilidad de estar entre el 10 % más favorable: ${G.pa[i]} %</div>`;
+  const rz = [G.r1[i], G.r2[i]].filter((k) => k !== 255).map((k) => G.razones[k]);
+  if (z !== 5 && rz.length) h += `<div class="razones"><b>Lo que más pesa aquí:</b><ul>${rz.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></div>`;
+  return h + `</div>`;
+}
+function cajaCorredor(lat, lon) {
+  const fs = buscarEn(D.corredores, lat, lon);
+  if (!fs.length) return "";
+  const p = fs.sort((a, b) => (a.properties.tipo === "prioritario" ? -1 : 1))[0].properties;
+  const razones = Object.keys(CRITERIOS).filter((k) => p[k]).map((k) => `<li>${CRITERIOS[k]}</li>`).join("");
+  return `<div class="caja corredor ${p.tipo}"><h3>Corredor ${p.tipo} de exploración</h3>` +
+    `<div>Franja de roca favorable (Fm. Muzo, Paja o junto a su contacto) que además está:</div><ul>${razones}</ul>` +
+    `<div class="hint">Es una franja para recorrer y buscar señales en el terreno (vea “Guía de campo”), no un punto exacto: la geología de base es 1:100.000 (error de 50 a 100 m).</div></div>`;
+}
+function cajaProfundidad(i) {
+  if (i < 0 || G.prof[i] === 255) return "";
+  const p = G.prof[i] * 5, lo = G.pmin[i] * 5, hi = G.pmax[i] * 5;
+  if (p < 10) return `<div class="caja"><h3>Bajo tierra</h3>Aquí <b>aflora la Formación Muzo</b> (o está a pocos metros): la roca donde se forma la esmeralda está en superficie.</div>`;
+  return `<div class="caja"><h3>Bajo tierra (estimado)</h3>La Formación Muzo estaría a unos <b>${Math.round(p / 10) * 10} m</b> de profundidad` +
+    ` (entre ${Math.round(lo / 10) * 10} y ${Math.round(hi / 10) * 10} m), bajo la Formación Capotes.` +
+    `<div class="hint">Cálculo aproximado con el buzamiento de las capas medido en la región. No reemplaza un estudio de campo.</div></div>`;
+}
+function cajaTitulo(lat, lon) {
+  const fs = buscarEn(D.titulos, lat, lon);
+  if (!fs.length) return `<div class="caja"><h3>Títulos mineros</h3>Este punto no está dentro de un título minero de esmeralda vigente registrado en la ANM.<div class="hint">Para explorar o explotar se necesita un título o autorización de la Agencia Nacional de Minería.</div></div>`;
+  return `<div class="caja aviso"><h3>Dentro de un título minero</h3>` + fs.map((f) => {
+    const p = f.properties;
+    return `<div><b>${esc(p.CODIGO_EXPEDIENTE)}</b> · ${esc(p.MODALIDAD)} · etapa: ${esc(p.ETAPA || "—")}</div>`;
+  }).join("") + `<div class="hint">Trabajar dentro de un título ajeno sin permiso del titular es ilegal.</div></div>`;
 }
 
 // ---------------------------------------------------------------- selección de un lugar
@@ -143,44 +260,38 @@ function seleccionar(lat, lon, titulo, subtitulo = "") {
   if (circuloSel) map.removeLayer(circuloSel);
   capaCercanas.clearLayers();
   marcadorSel = L.marker([lat, lon]).addTo(map);
-  circuloSel = L.circle([lat, lon], { radius: RADIO_KM * 1000, color: "#fff", weight: 2, dashArray: "6 6", fill: false }).addTo(map);
+  circuloSel = L.circle([lat, lon], { radius: RADIO_KM * 1000, color: "#fff", weight: 2, dashArray: "6 6", fill: false, interactive: false }).addTo(map);
 
-  const i = celdaEn(lat, lon);
-  const todas = areasCercanas(lat, lon, Infinity);
+  const i = indice(lat, lon);
+  const todas = areasCercanas(lat, lon);
   const cerca = todas.slice(0, 5);
   const cont = resumenRadio(lat, lon, RADIO_KM);
-  const kmCelda = (D.celdas.res_m / 1000) ** 2;
+  const kmCelda = (G.res / 1000) ** 2;
   const enRadio = todas.filter((a) => a.d <= RADIO_KM);
-
-  cerca.forEach((a, k) => marcadorNumero({ lat: a.latC, lon: a.lonC }, k + 1, `Área ${k + 1}: ${dondeTxt(a)}`));
+  cerca.forEach((a, k) => marcadorNumero(a.latC, a.lonC, k + 1, `Área ${k + 1}: ${dondeTxt(a)}`));
 
   let html = `<h2>${esc(titulo)}</h2>${subtitulo ? `<div class="hint">${esc(subtitulo)}</div>` : ""}`;
-  if (i >= 0) {
-    const z = D.celdas.z[i];
-    html += `<div class="caja"><h3>En este punto</h3>${chip(z)}<div>${EXPLICACION[z]}</div>`;
-    if (z !== 5) html += `<div class="hint">Probabilidad de estar entre lo más favorable: ${D.celdas.pa[i]} %</div>`;
-    html += `</div>`;
-  } else {
-    html += `<div class="caja">Este punto está fuera del área estudiada.</div>`;
-  }
+  html += `<div class="coords">${lat.toFixed(5)}, ${lon.toFixed(5)} · <a href="https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}" target="_blank" rel="noopener">abrir en Google Maps</a></div>`;
+  html += cajaPunto(i) + cajaCorredor(lat, lon) + cajaProfundidad(i);
   html += `<div class="caja"><h3>A menos de ${RADIO_KM} km</h3>${barra(cont)}`;
   const alto = (cont[0] + cont[1]) * kmCelda;
   html += alto > 0
-    ? `<div>Hay <b>${alto.toFixed(1).replace(".", ",")} km²</b> de potencial alto en ${enRadio.length} área(s).</div>`
+    ? `<div>Hay <b>${fmtNum(alto)} km²</b> de potencial alto en ${enRadio.length} área(s).</div>`
     : `<div>No hay zonas de potencial alto a menos de ${RADIO_KM} km.</div>`;
   html += `</div>`;
   if (cerca.length) {
     html += `<div class="caja"><h3>Áreas de potencial alto más cercanas</h3><ul class="cerca">` +
       cerca.map((a, k) => `<li data-lat="${a.latC}" data-lon="${a.lonC}"><b>${k + 1}.</b> ${dondeTxt(a)}` +
-        ` · ${a.km2.toFixed(1).replace(".", ",")} km²${a.municipio ? ` · ${esc(a.municipio)}` : ""}` +
-        `<br><small class="hint">${a.confianza_alta_pct} % con confianza alta</small></li>`).join("") + `</ul></div>`;
+        ` · ${fmtNum(a.km2)} km²${a.municipio ? ` · ${esc(a.municipio)}` : ""}` +
+        `<br><small class="hint">${a.confianza_alta_pct} % con confianza alta · toque para acercarse y ver los corredores</small></li>`).join("") + `</ul></div>`;
   }
-  html += `<p class="hint">Recuerde: “potencial alto” significa que se parece a donde hay minas; no garantiza esmeralda.</p>`;
+  if (i >= 0) html += cajaTitulo(lat, lon);
+  html += `<p class="hint">Recuerde: es una guía de exploración. “Potencial alto” significa que se parece a donde hay minas; no garantiza esmeralda.</p>`;
   $("#detalle").innerHTML = html;
   $("#detalle").querySelectorAll(".cerca li").forEach((li) =>
-    li.addEventListener("click", () => map.flyTo([+li.dataset.lat, +li.dataset.lon], 14)));
+    li.addEventListener("click", () => map.flyTo([+li.dataset.lat, +li.dataset.lon], 15)));
 
-  map.flyTo([lat, lon], 12, { duration: 0.8 });
+  map.flyTo([lat, lon], Math.max(map.getZoom(), 12), { duration: 0.8 });
   mostrarPanel();
 }
 
@@ -236,24 +347,23 @@ function seleccionarMunicipio(f) {
   capaCercanas.clearLayers();
   if (marcadorSel) map.removeLayer(marcadorSel);
   if (circuloSel) map.removeLayer(circuloSel);
-  const capa = L.geoJSON(f);
-  map.flyToBounds(capa.getBounds(), { padding: [20, 20], duration: 0.8 });
+  map.flyToBounds(L.geoJSON(f).getBounds(), { padding: [20, 20], duration: 0.8 });
   const p = f.properties, km = [0, 1, 2, 3, 4, 5].map((z) => p[`km2_${z}`] || 0);
   const tot = km.reduce((a, b) => a + b, 0);
   const areas = D.areas.filter((a) => a.municipio === p.shapeName && a.km2 >= AREA_MIN_KM2).slice(0, 8);
-  areas.forEach((a, k) => marcadorNumero(a, k + 1, `${a.km2.toFixed(1).replace(".", ",")} km²`));
+  areas.forEach((a, k) => marcadorNumero(a.lat, a.lon, k + 1, `${fmtNum(a.km2)} km²`));
   let html = `<h2>${esc(p.shapeName)}</h2><div class="hint">Municipio · ${tot.toFixed(0)} km² dentro del área estudiada</div>`;
   html += `<div class="caja"><h3>Cómo se reparte el territorio</h3>${barra(km)}<ul class="leyenda">` +
-    km.map((v, z) => v ? `<li><i style="background:${color(z)}"></i>${ZONAS_CORTAS[z]}: ${v.toFixed(1).replace(".", ",")} km² (${Math.round((100 * v) / tot)} %)</li>` : "").join("") + `</ul></div>`;
+    km.map((v, z) => v ? `<li><i style="background:${color(z)}"></i>${ZONAS_CORTAS[z]}: ${fmtNum(v)} km² (${Math.round((100 * v) / tot)} %)</li>` : "").join("") + `</ul></div>`;
   if (areas.length) {
     html += `<div class="caja"><h3>Áreas de potencial alto más grandes</h3><ul class="cerca">` +
-      areas.map((a, k) => `<li data-lat="${a.lat}" data-lon="${a.lon}"><b>${k + 1}.</b> ${a.km2.toFixed(1).replace(".", ",")} km² · ${a.confianza_alta_pct} % con confianza alta</li>`).join("") + `</ul></div>`;
+      areas.map((a, k) => `<li data-lat="${a.lat}" data-lon="${a.lon}"><b>${k + 1}.</b> ${fmtNum(a.km2)} km² · ${a.confianza_alta_pct} % con confianza alta</li>`).join("") + `</ul></div>`;
   } else {
     html += `<div class="caja">Este municipio no tiene áreas de potencial alto dentro del área estudiada.</div>`;
   }
   $("#detalle").innerHTML = html;
   $("#detalle").querySelectorAll(".cerca li").forEach((li) =>
-    li.addEventListener("click", () => map.flyTo([+li.dataset.lat, +li.dataset.lon], 14)));
+    li.addEventListener("click", () => map.flyTo([+li.dataset.lat, +li.dataset.lon], 15)));
   mostrarPanel();
 }
 function iniciarMunicipios() {
@@ -261,7 +371,7 @@ function iniciarMunicipios() {
     (b.properties.km2_0 + b.properties.km2_1) - (a.properties.km2_0 + a.properties.km2_1));
   $("#lista-municipios").innerHTML = feats.map((f, k) => {
     const p = f.properties, km = [0, 1, 2, 3, 4, 5].map((z) => p[`km2_${z}`] || 0);
-    return `<li data-k="${k}"><b>${esc(p.shapeName)}</b>${barra(km)}<small>Potencial alto: ${(km[0] + km[1]).toFixed(1).replace(".", ",")} km²</small></li>`;
+    return `<li data-k="${k}"><b>${esc(p.shapeName)}</b>${barra(km)}<small>Potencial alto: ${fmtNum(km[0] + km[1])} km²</small></li>`;
   }).join("");
   $("#lista-municipios").addEventListener("click", (e) => {
     const li = e.target.closest("li"); if (li) seleccionarMunicipio(feats[+li.dataset.k]);
@@ -285,7 +395,7 @@ async function main() {
   iniciarBuscador();
   iniciarMunicipios();
   $("#leyenda").innerHTML = ZONAS_CORTAS.map((n, z) => `<li><i style="background:${color(z)}"></i><span><b>${n}.</b> ${EXPLICACION[z]}</span></li>`).join("");
-  $("#meta").textContent = `${D.meta.modelo} · Inferencia: ${D.meta.inferencia} · Datos del ${D.meta.fecha} · Cuadros de ${D.meta.res_m} m.`;
+  $("#meta").textContent = `${D.meta.modelo} · Inferencia: ${D.meta.inferencia} · Datos del ${D.meta.fecha} · Cuadros de ${D.meta.res_m} m; corredores a 30 m.`;
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => activarTab(b.dataset.tab)));
   $("#toggle-panel").addEventListener("click", () => { $("#panel").classList.toggle("oculto"); setTimeout(() => map.invalidateSize(), 50); });
   $("#cargando").remove();
