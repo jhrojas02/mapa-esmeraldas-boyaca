@@ -121,10 +121,10 @@ function buscarEn(fc, lat, lon) {
 // ---------------------------------------------------------------- carga
 async function cargar() {
   const get = (f) => fetch(`data/${f}`).then((r) => { if (!r.ok) throw new Error(f); return r.json(); });
-  const [grilla, municipios, poblados, areas, meta, corredores, estructuras, titulos] = await Promise.all([
+  const [grilla, municipios, poblados, areas, meta, corredores, estructuras, titulos, explica] = await Promise.all([
     get("grilla.json"), get("municipios.geojson"), get("poblados.json"), get("areas_alto.json"),
-    get("meta.json"), get("corredores.geojson"), get("estructuras.geojson"), get("titulos.geojson")]);
-  D = { municipios, poblados, areas, meta, corredores, estructuras, titulos };
+    get("meta.json"), get("corredores.geojson"), get("estructuras.geojson"), get("titulos.geojson"), get("explica.json")]);
+  D = { explica, municipios, poblados, areas, meta, corredores, estructuras, titulos };
   G = { ...grilla, z: b64(grilla.z), pa: b64(grilla.pa), pb: b64(grilla.pb), a: b64(grilla.a, Uint16Array),
     r1: b64(grilla.r1), r2: b64(grilla.r2), prof: b64(grilla.prof), pmin: b64(grilla.pmin), pmax: b64(grilla.pmax) };
   G.celdasArea = [];
@@ -223,8 +223,6 @@ function cajaPunto(i) {
   const z = G.z[i];
   let h = `<div class="caja"><h3>En este cuadro de ${G.res} m</h3>${chip(z)}<div>${EXPLICACION[z]}</div>`;
   if (z !== 5) h += `<div class="hint">Probabilidad de estar entre el 10 % más favorable: ${G.pa[i]} %</div>`;
-  const rz = [G.r1[i], G.r2[i]].filter((k) => k !== 255).map((k) => G.razones[k]);
-  if (z !== 5 && rz.length) h += `<div class="razones"><b>Lo que más pesa aquí:</b><ul>${rz.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></div>`;
   return h + `</div>`;
 }
 function cajaCorredor(lat, lon) {
@@ -253,6 +251,117 @@ function cajaTitulo(lat, lon) {
   }).join("") + `<div class="hint">Trabajar dentro de un título ajeno sin permiso del titular es ilegal.</div></div>`;
 }
 
+// ---------------------------------------------------------------- explicaciones (por qué sí / por qué no)
+const BLOQUES = new Map();
+async function bloque(i) {
+  const B = D.explica.bloque, r = Math.floor(i / G.W), c = i % G.W, key = `${Math.floor(r / B)}_${Math.floor(c / B)}`;
+  if (!BLOQUES.has(key)) {
+    BLOQUES.set(key, fetch(`data/detalle/${key}.json`).then((x) => x.json()).then((j) => {
+      const celdas = b64(j.celdas, Uint16Array), pos = new Map();
+      celdas.forEach((l, k) => pos.set(l, k));
+      return { pos, val: j.valores.map((v) => b64(v, Int16Array)), con: j.contrib.map((v) => b64(v, Int16Array)),
+        extras: Object.fromEntries(Object.entries(j.extras || {}).map(([k, v]) => [k, b64(v, Int16Array)])),
+        gq: b64(j.gq_dist_km, Int16Array) };
+    }));
+  }
+  const t = await BLOQUES.get(key), k = t.pos.get((r % B) * B + (c % B));
+  if (k === undefined) return null;
+  return { val: t.val.map((a) => a[k]), con: t.con.map((a) => a[k] / 1000),
+    acuerdo: t.extras.acuerdo ? t.extras.acuerdo[k] / 1000 : null, gqKm: t.gq[k] / 10 };
+}
+const NULO = -32768;
+function valorReal(v, q) { return q === NULO ? null : v.tipo === "roca" ? q : q / v.escala; }
+function fmtValor(v, x) {
+  if (x === null || x === undefined) return "sin dato";
+  switch (v.tipo) {
+    case "dist": return x < 1000 ? `${Math.max(30, Math.round(x / 10) * 10)} m` : `${fmtNum(x / 1000)} km`;
+    case "num2": return fmtNum(x, 2);
+    case "frac": return `${Math.round(x * 100)} %`;
+    case "pct": return `${Math.round(x * 100)} %`;
+    case "log10": return `${fmtNum(10 ** x, x < 0 ? 2 : 1)}`;
+    case "m1": return `${x >= 0 ? "+" : "−"}${fmtNum(Math.abs(x))} m`;
+    case "m0": return `${Math.round(x).toLocaleString("es-CO")} m`;
+    case "grados": return `${Math.round(x)}°`;
+    case "z": return x >= 0 ? `${fmtNum(x)} desv. más verde que su entorno` : `${fmtNum(-x)} desv. menos verde que su entorno`;
+    case "roca": return D.explica.roca_texto[D.explica.roles[x]] || "sin dato";
+  }
+  return String(x);
+}
+function percentil(v, x) {
+  const p = v.percentiles_region; if (!p || x === null) return null;
+  let k = 0; while (k < p.length - 1 && p[k + 1] <= x) k++;
+  return Math.round((k / (p.length - 1)) * 100);
+}
+function frase(v, x, c) {
+  if (v.tipo === "roca") return `Está sobre ${fmtValor(v, x).replace(/^Formación/, "la Formación")}`;
+  return (c > 0 ? v.favor : v.contra).replace("{v}", fmtValor(v, x));
+}
+async function explicar(i, ctx) {
+  const caja = document.getElementById("porque");
+  let d;
+  try { d = await bloque(i); } catch (e) { d = null; }
+  if (!caja || !document.body.contains(caja)) return;
+  if (!d) { caja.innerHTML = `<h3>¿Por qué?</h3><div class="hint">No hay explicación disponible para este cuadro.</div>`; return; }
+  const items = D.explica.variables.map((v, k) => ({ v, x: valorReal(v, d.val[k]), c: d.con[k] }))
+    .filter((o) => o.x !== null && !o.v.contrario && Math.abs(o.c) >= 0.1);
+  const favor = items.filter((o) => o.c > 0).sort((a, b) => b.c - a.c).slice(0, 3);
+  const contra = items.filter((o) => o.c < 0).sort((a, b) => a.c - b.c).slice(0, 3);
+  const z = G.z[i];
+  const intro = z <= 1 ? "Puede haber esmeraldas porque este cuadro se parece a donde hay minas en lo siguiente:"
+    : z >= 3 ? "Es poco probable que haya esmeraldas: este cuadro se parece poco a donde hay minas."
+    : "El modelo no se decide: hay razones a favor y en contra.";
+  const lista = (arr, cls) => arr.length ? `<ul class="porque ${cls}">${arr.map((o) => `<li>${esc(frase(o.v, o.x, o.c))}</li>`).join("")}</ul>` : `<div class="hint">Nada importante.</div>`;
+  caja.innerHTML = `<h3>¿Por qué?</h3><div>${intro}</div>` +
+    (z >= 3 ? `<div class="sub contra">👎 En contra</div>${lista(contra, "contra")}<div class="sub favor">👍 A favor</div>${lista(favor, "favor")}`
+      : `<div class="sub favor">👍 A favor</div>${lista(favor, "favor")}<div class="sub contra">👎 En contra</div>${lista(contra, "contra")}`) +
+    `<button class="btn" id="ver-detalle">Ver explicación detallada</button>`;
+  document.getElementById("ver-detalle").addEventListener("click", () => detalle(i, d, ctx));
+}
+function barraEfecto(c) {
+  const w = Math.min(50, Math.abs(c) * 35);
+  return `<div class="efecto"><span class="${c >= 0 ? "pos" : "neg"}" style="width:${w}%;${c >= 0 ? "left:50%" : `left:${50 - w}%`}"></span></div>`;
+}
+function detalle(i, d, ctx) {
+  const z = G.z[i], E = D.explica;
+  const filas = E.variables.map((v, k) => ({ v, x: valorReal(v, d.val[k]), c: d.con[k] }))
+    .sort((a, b) => Math.abs(b.c) - Math.abs(a.c));
+  const tot = filas.reduce((s, o) => s + o.c, 0);
+  let h = `<h2>Explicación detallada</h2><div class="hint">${esc(ctx.titulo)} · ${ctx.lat.toFixed(5)}, ${ctx.lon.toFixed(5)} · cuadro de ${G.res} m</div>`;
+  h += `<h3>1. Cómo se decidió la zona</h3><p>${chip(z)}</p>
+    <p>El modelo no da un “sí” o “no”: calcula 2.000 versiones posibles del mapa, todas compatibles con los datos, y
+    mira en cuántas este cuadro queda entre el <b>10 % más favorable</b> de toda la región y en cuántas queda en la
+    <b>mitad menos favorable</b>.</p>
+    <ul><li>Entre el 10 % más favorable: <b>${G.pa[i]} %</b> de las versiones.</li>
+    <li>En la mitad menos favorable: <b>${G.pb[i]} %</b> de las versiones.</li></ul>
+    <p class="hint">Reglas: potencial alto si lo primero pasa del 50 % (confianza alta desde 80 %); potencial bajo si
+    lo segundo pasa del 50 % (alta desde 80 %); si ninguno, incierto.</p>`;
+  if (d.acuerdo !== null) h += `<p>Al repetir todo el ajuste 5 veces con distinto azar, este cuadro quedó en la misma zona
+    ${Math.round(d.acuerdo * 5)} de 5 veces${d.acuerdo < 1 ? " (su clasificación es <b>poco estable</b>: tómela con cautela)" : ""}.</p>`;
+  h += `<h3>2. Qué pesa en este cuadro</h3>
+    <p class="hint">“Efecto” es cuánto sube (verde) o baja (rojo) el puntaje de este cuadro frente a un cuadro promedio
+    de la región. “Donde hay minas” es el valor típico (mediana) en los cuadros con minas conocidas. El puntaje total
+    de este cuadro frente al promedio es <b>${tot >= 0 ? "+" : "−"}${fmtNum(Math.abs(tot), 2)}</b> (en escala logit).</p>
+    <div class="tabla-wrap"><table class="tabla"><thead><tr><th>Variable</th><th>Aquí</th><th>Donde hay minas</th><th>Efecto</th></tr></thead><tbody>` +
+    filas.map((o) => {
+      const p = percentil(o.v, o.x);
+      const tip = o.v.tipo === "roca"
+        ? Object.entries(o.v.rol_minas || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([r, f]) => `${Math.round(f * 100)} % en ${E.roca_texto[r].split(",")[0]}`).join("; ")
+        : fmtValor(o.v, o.v.tipico_minas);
+      const rel = p === null ? "" : o.v.tipo === "dist" ? (p <= 50 ? `<small>más cerca que el ${100 - p} % de la región</small>` : `<small>más lejos que el ${p} % de la región</small>`)
+        : (p >= 50 ? `<small>más alto que el ${p} % de la región</small>` : `<small>más bajo que el ${100 - p} % de la región</small>`);
+      const nota = o.v.contrario ? `<br><small class="aviso-txt">Efecto contrario a lo que espera la geología: puede ser un artefacto de los datos.</small>` : "";
+      return `<tr><td>${esc(o.v.nombre)}${nota}</td><td>${esc(fmtValor(o.v, o.x))}<br>${rel}</td><td>${esc(tip)}</td><td>${barraEfecto(o.c)}<small>${o.c >= 0 ? "+" : "−"}${fmtNum(Math.abs(o.c), 2)}</small></td></tr>`;
+    }).join("") + `</tbody></table></div>`;
+  h += `<h3>3. Qué no sabe el modelo aquí</h3><ul>
+    <li>La geología viene de mapas 1:100.000: los límites de las formaciones y las fallas pueden estar corridos 50 a 100 m.</li>
+    <li>${d.gqKm > 6 ? `No hay muestras de sedimentos de quebrada a menos de 6 km (la más cercana está a ${fmtNum(d.gqKm)} km): la química no aporta en este cuadro.` : `La muestra de sedimentos más cercana está a ${fmtNum(d.gqKm)} km; la química de este cuadro es una interpolación.`}</li>
+    <li>${esc(E.nota_neutralizadas)}</li>
+    <li>El modelo aprende de 48 cuadros con minas conocidas, casi todas del tipo Muzo-Coscuez. No ve vetas, túneles ni lo que saben los mineros (eso será el Modelo B).</li></ul>
+    <h3>4. Qué hacer con esto</h3><p>${z <= 1 ? "Vale la pena recorrer la zona: busque los corredores al acercarse y las señales de la Guía de campo." : z === 2 ? "Si hay otras señales en el terreno (vetas de calcita, albitita, lutita negra), puede valer la pena mirar; si no, hay zonas más favorables cerca." : "Hay zonas más favorables en la región; revise la lista de áreas cercanas."}</p>`;
+  $("#modal-cuerpo").innerHTML = h;
+  $("#modal").hidden = false;
+}
+
 // ---------------------------------------------------------------- selección de un lugar
 function seleccionar(lat, lon, titulo, subtitulo = "") {
   activarTab("buscar");
@@ -271,8 +380,9 @@ function seleccionar(lat, lon, titulo, subtitulo = "") {
   cerca.forEach((a, k) => marcadorNumero(a.latC, a.lonC, k + 1, `Área ${k + 1}: ${dondeTxt(a)}`));
 
   let html = `<h2>${esc(titulo)}</h2>${subtitulo ? `<div class="hint">${esc(subtitulo)}</div>` : ""}`;
-  html += `<div class="coords">${lat.toFixed(5)}, ${lon.toFixed(5)} · <a href="https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}" target="_blank" rel="noopener">abrir en Google Maps</a></div>`;
-  html += cajaPunto(i) + cajaCorredor(lat, lon) + cajaProfundidad(i);
+  html += `<div class="coords">${lat.toFixed(5)}, ${lon.toFixed(5)} · <a href="https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}" target="_blank" rel="noopener">abrir en Google Maps</a> · <a href="#" id="compartir">compartir este punto</a></div>`;
+  html += cajaPunto(i) + (i >= 0 && G.z[i] !== 5 ? `<div class="caja" id="porque"><h3>¿Por qué?</h3><div class="hint">Cargando la explicación…</div></div>` : "") +
+    cajaCorredor(lat, lon) + cajaProfundidad(i);
   html += `<div class="caja"><h3>A menos de ${RADIO_KM} km</h3>${barra(cont)}`;
   const alto = (cont[0] + cont[1]) * kmCelda;
   html += alto > 0
@@ -290,9 +400,17 @@ function seleccionar(lat, lon, titulo, subtitulo = "") {
   $("#detalle").innerHTML = html;
   $("#detalle").querySelectorAll(".cerca li").forEach((li) =>
     li.addEventListener("click", () => map.flyTo([+li.dataset.lat, +li.dataset.lon], 15)));
+  history.replaceState(null, "", `#${lat.toFixed(5)},${lon.toFixed(5)}`);
+  $("#compartir").addEventListener("click", async (e) => {
+    e.preventDefault();
+    const url = location.href, texto = `Punto en la guía de exploración esmeraldífera: ${ZONAS_CORTAS[i >= 0 ? G.z[i] : 2]}`;
+    if (navigator.share) { try { await navigator.share({ title: "Guía de exploración esmeraldífera", text: texto, url }); } catch (_) {} }
+    else { try { await navigator.clipboard.writeText(url); e.target.textContent = "enlace copiado"; } catch (_) { prompt("Copie este enlace:", url); } }
+  });
 
   map.flyTo([lat, lon], Math.max(map.getZoom(), 12), { duration: 0.8 });
   mostrarPanel();
+  if (i >= 0 && G.z[i] !== 5) explicar(i, { lat, lon, titulo });
 }
 
 // ---------------------------------------------------------------- buscador
@@ -398,6 +516,12 @@ async function main() {
   $("#meta").textContent = `${D.meta.modelo} · Inferencia: ${D.meta.inferencia} · Datos del ${D.meta.fecha} · Cuadros de ${D.meta.res_m} m; corredores a 30 m.`;
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => activarTab(b.dataset.tab)));
   $("#toggle-panel").addEventListener("click", () => { $("#panel").classList.toggle("oculto"); setTimeout(() => map.invalidateSize(), 50); });
+  $("#cerrar-modal").addEventListener("click", () => { $("#modal").hidden = true; });
+  $("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") $("#modal").hidden = true; });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("#modal").hidden = true; });
   $("#cargando").remove();
+  const m = location.hash.match(/^#(-?\d+\.?\d*),(-?\d+\.?\d*)$/);
+  if (m) seleccionar(+m[1], +m[2], "Punto compartido");
+  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 main();

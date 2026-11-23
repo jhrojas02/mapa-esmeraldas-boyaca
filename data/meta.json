@@ -1,1 +1,1 @@
-{"modelo": "Modelo A v2 (sin conocimiento local)", "inferencia": "Variacional (fullrank_advi)", "fecha": "2026-11-23", "celdas": 190352, "res_m": 100, "corredores": {"km2_prioritario": 1.8387, "km2_secundario": 24.0948}}
+{"modelo": "Modelo A v2 (sin conocimiento local)", "inferencia": "Variacional (fullrank_advi (GPU, NumPyro))", "fecha": "2026-11-23", "celdas": 190352, "res_m": 100, "corredores": {"km2_prioritario": 2.1528, "km2_secundario": 27.9738}, "estabilidad_semillas": 0.898, "sesgo_corregido": true}
