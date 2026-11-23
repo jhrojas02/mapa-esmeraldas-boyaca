@@ -65,6 +65,7 @@ main { flex: 1; display: flex; min-height: 0; }
 .leyenda { list-style: none; padding: 0; margin: 0 0 8px; }
 .leyenda li { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
 .leyenda i { width: 18px; height: 18px; border-radius: 3px; border: 1px solid #0003; flex: none; }
+.leyenda.lineas i { height: 0; width: 26px; border: 0; border-radius: 0; }
 .meta { color: var(--gris); font-size: .78rem; margin-top: 16px; }
 
 .leaflet-control.leyenda-mapa { background: #fff; padding: 8px 10px; border-radius: 6px; box-shadow: 0 1px 5px #0004;
@@ -108,6 +109,13 @@ ul.porque li { margin: 3px 0; }
 .efecto::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; border-left: 1px solid #999; }
 .efecto span { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
 .efecto .pos { background: #1b7837; } .efecto .neg { background: #b2182b; }
+
+#tutorial { position: fixed; inset: 0; background: #0008; z-index: 10001; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.tut-caja { background: #fff; border-radius: 12px; max-width: 420px; padding: 20px; }
+.tut-caja h2 { margin: 4px 0 8px; color: var(--verde); }
+.tut-botones { display: flex; gap: 8px; } .tut-botones .btn { margin-top: 6px; }
+.btn.primario { background: var(--verde); color: #fff; }
+.btn:disabled { opacity: .8; cursor: default; }
 
 @media (max-width: 760px) {
   .modal-caja { max-height: 94vh; padding: 14px; }

@@ -16,6 +16,7 @@ const CRITERIOS = {
   C: "cerca de la cresta de un pliegue (anticlinal) en roca favorable",
   F: "cerca de una falla",
   X: "cerca de un cruce de fallas",
+  L: "sobre o junto a una fractura que se ve en el relieve (valle o quiebre recto)",
 };
 const ESTILO_CORREDOR = {
   prioritario: { color: "#7a0177", fillColor: "#f768a1", weight: 1.5, fillOpacity: 0.55 },
@@ -26,10 +27,12 @@ const ESTILO_ESTRUCTURA = {
   falla_inversa: { color: "#d7301f", weight: 2.5 },
   charnela: { color: "#6a3d9a", weight: 3 },
   contacto_muzo_capotes: { color: "#ffffff", weight: 2, dashArray: "2 4" },
+  lineamiento: { color: "#00bcd4", weight: 1.5, opacity: 0.9 },
 };
 const NOMBRE_ESTRUCTURA = {
   falla: "Falla", falla_inversa: "Falla inversa", charnela: "Cresta de anticlinal en roca favorable",
   contacto_muzo_capotes: "Contacto Fm. Muzo – Fm. Capotes",
+  lineamiento: "Fractura vista en el relieve (lineamiento)",
 };
 const RADIO_KM = 5;
 const AREA_MIN_KM2 = 0.25;
@@ -231,7 +234,7 @@ function cajaCorredor(lat, lon) {
   const p = fs.sort((a, b) => (a.properties.tipo === "prioritario" ? -1 : 1))[0].properties;
   const razones = Object.keys(CRITERIOS).filter((k) => p[k]).map((k) => `<li>${CRITERIOS[k]}</li>`).join("");
   return `<div class="caja corredor ${p.tipo}"><h3>Corredor ${p.tipo} de exploración</h3>` +
-    `<div>Franja de roca favorable (Fm. Muzo, Paja o junto a su contacto) que además está:</div><ul>${razones}</ul>` +
+    `<div>Franja de roca favorable (Fm. Muzo o Paja, o las formaciones vecinas a menos de 1 km de ellas) que además está:</div><ul>${razones}</ul>` +
     `<div class="hint">Es una franja para recorrer y buscar señales en el terreno (vea “Guía de campo”), no un punto exacto: la geología de base es 1:100.000 (error de 50 a 100 m).</div></div>`;
 }
 function cajaProfundidad(i) {
@@ -362,6 +365,83 @@ function detalle(i, d, ctx) {
   $("#modal").hidden = false;
 }
 
+// ---------------------------------------------------------------- corredor más cercano y GPX
+function corredorCercano(lat, lon, tipo = "prioritario") {
+  const [x, y] = aXY(lat, lon);
+  let best = null;
+  if (buscarEn(D.corredores, lat, lon).some((f) => f.properties.tipo === tipo)) return { d: 0, lat, lon, dir: "" };
+  for (const f of D.corredores.features) {
+    if (f.properties.tipo !== tipo) continue;
+    const polis = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    for (const p of polis) for (const [lo, la] of p[0]) {
+      if (Math.abs(la - lat) > 0.1 || Math.abs(lo - lon) > 0.1) continue;
+      const [cx, cy] = aXY(la, lo), d = Math.hypot(cx - x, cy - y);
+      if (!best || d < best.d) best = { d, lat: la, lon: lo, cx, cy };
+    }
+  }
+  return best ? { d: best.d / 1000, lat: best.lat, lon: best.lon, dir: rumbo(x, y, best.cx, best.cy) } : null;
+}
+function descargarGPX(lat, lon, titulo, areas) {
+  const x = (s) => esc(s);
+  let wpt = `<wpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}"><name>${x(titulo)}</name><desc>Punto consultado</desc></wpt>\n`;
+  areas.forEach((a, k) => { wpt += `<wpt lat="${a.latC.toFixed(6)}" lon="${a.lonC.toFixed(6)}"><name>Área ${k + 1} (${fmtNum(a.km2)} km²)</name><desc>Potencial alto, ${a.confianza_alta_pct} % confianza alta</desc></wpt>\n`; });
+  let trk = "", n = 0;
+  for (const f of D.corredores.features) {
+    const polis = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    for (const p of polis) {
+      const anillo = p[0];
+      if (!anillo.some(([lo, la]) => Math.abs(la - lat) < 0.03 && Math.abs(lo - lon) < 0.03)) continue;
+      const pr = f.properties, por = Object.keys(CRITERIOS).filter((k) => pr[k]).map((k) => CRITERIOS[k]).join("; ");
+      trk += `<trk><name>Corredor ${pr.tipo} ${++n}</name><desc>${x(por)}</desc><trkseg>${anillo.map(([lo, la]) => `<trkpt lat="${la.toFixed(6)}" lon="${lo.toFixed(6)}"/>`).join("")}</trkseg></trk>\n`;
+    }
+  }
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Guía de exploración esmeraldífera" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${x(titulo)}</name><desc>Guía de exploración (no garantiza esmeralda). Corredores a ~3 km del punto.</desc></metadata>\n${wpt}${trk}</gpx>`;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([gpx], { type: "application/gpx+xml" }));
+  a.download = `esmeraldas_${lat.toFixed(4)}_${lon.toFixed(4)}.gpx`;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ---------------------------------------------------------------- guardar un municipio para usar sin señal
+async function guardarMunicipio(f, boton) {
+  const b = L.geoJSON(f).getBounds(), B = D.explica.bloque;
+  const esquinas = [b.getSouthWest(), b.getNorthEast(), b.getNorthWest(), b.getSouthEast()].map((p) => aXY(p.lat, p.lng));
+  const xs = esquinas.map((p) => p[0]), ys = esquinas.map((p) => p[1]);
+  const c0 = Math.max(0, Math.floor((Math.min(...xs) - G.x0) / G.res / B)), c1 = Math.floor((Math.max(...xs) - G.x0) / G.res / B);
+  const r0 = Math.max(0, Math.floor((G.y0 - Math.max(...ys)) / G.res / B)), r1 = Math.floor((G.y0 - Math.min(...ys)) / G.res / B);
+  const urls = [];
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) urls.push(`data/detalle/${r}_${c}.json`);
+  let ok = 0;
+  for (const u of urls) { try { const res = await fetch(u); if (res.ok) ok++; } catch (_) {} boton.textContent = `Guardando… ${ok}/${urls.length}`; }
+  boton.textContent = `✓ Datos guardados (${ok} bloques). El mapa base solo queda guardado en las partes que ya vio.`;
+  boton.disabled = true;
+}
+
+// ---------------------------------------------------------------- tutorial (primera visita)
+function tutorial() {
+  let visto = false;
+  try { visto = localStorage.getItem("tutorial_v2") === "1"; } catch (_) {}
+  if (visto) return;
+  const pasos = [
+    ["Bienvenido", "Esta es una <b>guía de exploración</b>: muestra dónde el terreno se parece a donde hoy hay minas de esmeralda. No garantiza que haya esmeralda."],
+    ["Colores", "<b>Rojo</b>: potencial alto. <b>Azul</b>: potencial bajo. <b>Gris</b>: el modelo no se decide. Mientras más intenso, más seguro está el modelo."],
+    ["Busque su vereda", "Escriba el nombre de su pueblo o vereda, o use <b>📍 Usar mi ubicación</b>. Toque cualquier punto para saber <b>por qué</b> puede haber o no esmeralda allí."],
+    ["Acérquese", "De cerca aparecen los <b>corredores</b> (rosado y amarillo): franjas de roca favorable junto a fallas, pliegues y fracturas. Son los lugares para recorrer primero."],
+    ["En el campo", "Puede <b>instalar</b> la app en el celular, usarla <b>sin señal</b> en lo que ya vio, y <b>descargar los corredores para su GPS</b>. Revise siempre los títulos mineros antes de trabajar."],
+  ];
+  let k = 0;
+  const div = document.createElement("div");
+  div.id = "tutorial";
+  const pintar = () => {
+    div.innerHTML = `<div class="tut-caja"><div class="hint">${k + 1} de ${pasos.length}</div><h2>${pasos[k][0]}</h2><p>${pasos[k][1]}</p>
+      <div class="tut-botones"><button class="btn" id="tut-saltar">Saltar</button><button class="btn primario" id="tut-sig">${k < pasos.length - 1 ? "Siguiente" : "Empezar"}</button></div></div>`;
+    div.querySelector("#tut-saltar").onclick = cerrar;
+    div.querySelector("#tut-sig").onclick = () => { if (k < pasos.length - 1) { k++; pintar(); } else cerrar(); };
+  };
+  const cerrar = () => { div.remove(); try { localStorage.setItem("tutorial_v2", "1"); } catch (_) {} };
+  pintar(); document.body.appendChild(div);
+}
+
 // ---------------------------------------------------------------- selección de un lugar
 function seleccionar(lat, lon, titulo, subtitulo = "") {
   activarTab("buscar");
@@ -381,6 +461,7 @@ function seleccionar(lat, lon, titulo, subtitulo = "") {
 
   let html = `<h2>${esc(titulo)}</h2>${subtitulo ? `<div class="hint">${esc(subtitulo)}</div>` : ""}`;
   html += `<div class="coords">${lat.toFixed(5)}, ${lon.toFixed(5)} · <a href="https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}" target="_blank" rel="noopener">abrir en Google Maps</a> · <a href="#" id="compartir">compartir este punto</a></div>`;
+  const corr = corredorCercano(lat, lon);
   html += cajaPunto(i) + (i >= 0 && G.z[i] !== 5 ? `<div class="caja" id="porque"><h3>¿Por qué?</h3><div class="hint">Cargando la explicación…</div></div>` : "") +
     cajaCorredor(lat, lon) + cajaProfundidad(i);
   html += `<div class="caja"><h3>A menos de ${RADIO_KM} km</h3>${barra(cont)}`;
@@ -395,12 +476,18 @@ function seleccionar(lat, lon, titulo, subtitulo = "") {
         ` · ${fmtNum(a.km2)} km²${a.municipio ? ` · ${esc(a.municipio)}` : ""}` +
         `<br><small class="hint">${a.confianza_alta_pct} % con confianza alta · toque para acercarse y ver los corredores</small></li>`).join("") + `</ul></div>`;
   }
+  if (corr) html += `<div class="caja"><h3>¿Hacia dónde camino?</h3>${corr.d < 0.03 ? "Está <b>dentro</b> de un corredor prioritario." :
+    `El corredor prioritario más cercano está a <b>${fmtKm(corr.d)} al ${corr.dir}</b>.`}
+    <button class="btn" id="ir-corredor">Ver ese corredor</button></div>`;
   if (i >= 0) html += cajaTitulo(lat, lon);
+  html += `<button class="btn" id="gpx">⬇ Descargar para GPS (punto, áreas y corredores cercanos)</button>`;
   html += `<p class="hint">Recuerde: es una guía de exploración. “Potencial alto” significa que se parece a donde hay minas; no garantiza esmeralda.</p>`;
   $("#detalle").innerHTML = html;
   $("#detalle").querySelectorAll(".cerca li").forEach((li) =>
     li.addEventListener("click", () => map.flyTo([+li.dataset.lat, +li.dataset.lon], 15)));
   history.replaceState(null, "", `#${lat.toFixed(5)},${lon.toFixed(5)}`);
+  if (corr) $("#ir-corredor").addEventListener("click", () => map.flyTo([corr.lat, corr.lon], 16));
+  $("#gpx").addEventListener("click", () => descargarGPX(lat, lon, titulo, cerca));
   $("#compartir").addEventListener("click", async (e) => {
     e.preventDefault();
     const url = location.href, texto = `Punto en la guía de exploración esmeraldífera: ${ZONAS_CORTAS[i >= 0 ? G.z[i] : 2]}`;
@@ -479,9 +566,11 @@ function seleccionarMunicipio(f) {
   } else {
     html += `<div class="caja">Este municipio no tiene áreas de potencial alto dentro del área estudiada.</div>`;
   }
+  html += `<button class="btn" id="guardar-mun">📥 Guardar los datos de ${esc(p.shapeName)} para usar sin señal</button>`;
   $("#detalle").innerHTML = html;
   $("#detalle").querySelectorAll(".cerca li").forEach((li) =>
     li.addEventListener("click", () => map.flyTo([+li.dataset.lat, +li.dataset.lon], 15)));
+  $("#guardar-mun").addEventListener("click", (e) => guardarMunicipio(f, e.target));
   mostrarPanel();
 }
 function iniciarMunicipios() {
@@ -522,6 +611,7 @@ async function main() {
   $("#cargando").remove();
   const m = location.hash.match(/^#(-?\d+\.?\d*),(-?\d+\.?\d*)$/);
   if (m) seleccionar(+m[1], +m[2], "Punto compartido");
+  if (!m) tutorial();
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 main();

@@ -17,6 +17,8 @@ Permite:
   zonas con minas, estabilidad de la clasificación y qué no sabe el modelo allí);
 - **instalarla en el celular** y usarla **sin señal** (guarda los datos y las partes del mapa ya vistas), y compartir
   un punto con un enlace;
+- ver las **fracturas del relieve** (lineamientos detectados en el modelo de terreno), saber **hacia dónde** queda el
+  corredor prioritario más cercano y **descargar un GPX** para el GPS;
 - consultar una **guía de campo** con las señales que acompañan a la esmeralda (lutita negra, vetas de calcita,
   albitita, pirita, brechas).
 
