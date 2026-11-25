@@ -27,12 +27,16 @@ const ESTILO_ESTRUCTURA = {
   falla_inversa: { color: "#d7301f", weight: 2.5 },
   charnela: { color: "#6a3d9a", weight: 3 },
   contacto_muzo_capotes: { color: "#ffffff", weight: 2, dashArray: "2 4" },
-  lineamiento: { color: "#00bcd4", weight: 1.5, opacity: 0.9 },
+  lineamiento: { color: "#9e9e9e", weight: 1.2, opacity: 0.8 },
+  lineamiento_nne: { color: "#ff9800", weight: 2.2, opacity: 0.95 },
+  lineamiento_nw: { color: "#00bcd4", weight: 1.8, opacity: 0.9 },
 };
 const NOMBRE_ESTRUCTURA = {
   falla: "Falla", falla_inversa: "Falla inversa", charnela: "Cresta de anticlinal en roca favorable",
   contacto_muzo_capotes: "Contacto Fm. Muzo – Fm. Capotes",
-  lineamiento: "Fractura vista en el relieve (lineamiento)",
+  lineamiento: "Fractura vista en el relieve (otra dirección)",
+  lineamiento_nne: "Fractura del relieve norte-noreste (dirección de las fallas por donde subieron los fluidos en Muzo y Coscuez)",
+  lineamiento_nw: "Fractura del relieve noroeste (dirección de muchas vetas)",
 };
 const RADIO_KM = 5;
 const AREA_MIN_KM2 = 0.25;
