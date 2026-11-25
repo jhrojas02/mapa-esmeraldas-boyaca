@@ -1,7 +1,7 @@
 // Service worker: la app funciona sin señal en el campo.
 // - Archivos de la app y datos del modelo: se guardan al instalar (se renuevan cuando cambia VERSION).
 // - Bloques de explicación y teselas del mapa base que el usuario ya vio: se guardan al usarlos (máx. ~3000 teselas).
-const VERSION = "v2-202611242348";
+const VERSION = "v2-202611251509";
 const BASE = ["./", "index.html", "app.js", "style.css", "manifest.json", "icono.svg",
   "data/grilla.json", "data/zonas.png", "data/municipios.geojson", "data/poblados.json", "data/areas_alto.json",
   "data/meta.json", "data/corredores.geojson", "data/estructuras.geojson", "data/titulos.geojson",
