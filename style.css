@@ -281,10 +281,7 @@ ul.porque li { margin: 4px 0; }
   background: rgba(255, 255, 255, .94); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   padding: 12px 14px; border-radius: 12px; box-shadow: var(--shadow); font-size: .78rem; line-height: 1.75; color: var(--ink-2);
 }
-.leyenda-mapa::before {
-  content: "Potencial de la zona"; display: block; font-weight: 700; font-size: .68rem; letter-spacing: .07em;
-  text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
-}
+.ley-boton { display: none; }
 .leyenda-mapa i { display: inline-block; width: 12px; height: 12px; margin-right: 8px; vertical-align: -1px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .12) inset; }
 .leyenda-mapa .sep { border-top: 1px solid var(--line); margin: 6px 0; }
 
@@ -397,7 +394,15 @@ ul.porque li { margin: 4px 0; }
   .tab { font-size: .7rem; }
   .tab-body { padding: 14px 14px 6px; }
   .panel-footer { display: none; }
-  .leyenda-mapa { display: none; }
+  .leaflet-control.leyenda-mapa { padding: 0; font-size: .8rem; max-width: 230px; }
+  .ley-boton {
+    display: flex; align-items: center; gap: 6px; padding: 9px 13px; border: 0; background: none; cursor: pointer;
+    font: 600 .82rem var(--font); color: var(--ink-2); width: 100%;
+  }
+  .ley-boton svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .ley-cuerpo { display: none; padding: 0 13px 11px; max-height: 42vh; overflow-y: auto; }
+  .leyenda-mapa.abierta .ley-cuerpo { display: block; }
+  .leyenda-mapa.abierta .ley-boton { color: var(--brand-600); }
   .modal-caja { max-height: 94vh; padding: 18px 16px; border-radius: 14px; }
   #modal { padding: 6px; }
 }

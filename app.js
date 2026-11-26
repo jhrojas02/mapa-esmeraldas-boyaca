@@ -280,16 +280,19 @@ function iniciarMapa() {
   };
   botonLineas.addTo(map);
 
-  const ley = L.control({ position: "bottomright" });   // se oculta en celulares (CSS)
+  const ley = L.control({ position: "bottomright" });   // en celulares se abre y se cierra con un botón
   ley.onAdd = () => {
     const div = L.DomUtil.create("div", "leaflet-control leyenda-mapa");
-    div.innerHTML = ZONAS_CORTAS.map((n, z) => `<div><i style="background:${color(z)}"></i>${n}</div>`).join("") +
+    div.innerHTML = `<button class="ley-boton" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="4" height="4" rx="1"/><rect x="4" y="15" width="4" height="4" rx="1"/><path d="M11 7h9M11 17h9"/></svg><span>Leyenda</span></button><div class="ley-cuerpo"><div class="tit">Qué tan favorable es</div>` + ZONAS_CORTAS.map((n, z) => `<div><i style="background:${color(z)}"></i>${n}</div>`).join("") +
       `<div class="sep"></div><div class="tit">Al acercarse</div>` +
       `<div><i style="background:${ESTILO_CORREDOR.prioritario.fillColor};border-color:${ESTILO_CORREDOR.prioritario.color}"></i>Buscar aquí primero</div>` +
       `<div><i style="background:${ESTILO_CORREDOR.secundario.fillColor};border-color:${ESTILO_CORREDOR.secundario.color}"></i>Vale la pena revisar</div>` +
       `<div><b class="ln falla"></b>Falla</div>` +
       `<div><b class="ln" style="border-top:3px solid #ffb300"></b>Fractura del terreno</div>` +
-      `<div><b class="ln" style="border-top:4px solid #00e5ff"></b>Cresta de pliegue</div>`;
+      `<div><b class="ln" style="border-top:4px solid #00e5ff"></b>Cresta de pliegue</div></div>`;
+    L.DomEvent.disableClickPropagation(div); L.DomEvent.disableScrollPropagation(div);
+    const bt = div.querySelector(".ley-boton");
+    bt.onclick = () => { const ab = div.classList.toggle("abierta"); bt.setAttribute("aria-expanded", ab); bt.querySelector("span").textContent = ab ? "Cerrar" : "Leyenda"; };
     return div;
   };
   ley.addTo(map);
