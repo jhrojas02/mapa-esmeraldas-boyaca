@@ -184,7 +184,8 @@ async function cargar() {
     get("meta.json"), get("corredores.geojson"), get("estructuras.geojson"), get("titulos.geojson"), get("explica.json")]);
   D = { explica, municipios, poblados, areas, meta, corredores, estructuras, titulos };
   G = { ...grilla, z: b64(grilla.z), pa: b64(grilla.pa), pb: b64(grilla.pb), a: b64(grilla.a, Uint16Array),
-    r1: b64(grilla.r1), r2: b64(grilla.r2), prof: b64(grilla.prof), pmin: b64(grilla.pmin), pmax: b64(grilla.pmax) };
+    r1: b64(grilla.r1), r2: b64(grilla.r2), prof: b64(grilla.prof), pmin: b64(grilla.pmin), pmax: b64(grilla.pmax),
+    elev: grilla.elev ? b64(grilla.elev, Uint16Array) : null };
   G.celdasArea = [];
   for (let i = 0; i < G.a.length; i++) if (G.a[i]) G.celdasArea.push(i);
 }
@@ -205,7 +206,7 @@ function iniciarMapa() {
 
   capaCorredores = L.geoJSON(D.corredores, {
     style: (f) => ESTILO_CORREDOR[f.properties.tipo],
-    onEachFeature: (f, l) => l.on("click", (e) => { L.DomEvent.stop(e); seleccionar(e.latlng.lat, e.latlng.lng, "Punto seleccionado en el mapa"); }),
+    onEachFeature: (f, l) => l.on("click", (e) => { L.DomEvent.stop(e); tocarMapa(e.latlng); }),
   });
   const bordes = L.geoJSON(D.estructuras, {
     filter: (f) => LINEA_DE[f.properties.tipo], interactive: false,
@@ -299,7 +300,7 @@ function iniciarMapa() {
 
   map.fitBounds(capaZonas.getBounds());
   porZoom();
-  map.on("click", (e) => seleccionar(e.latlng.lat, e.latlng.lng, "Punto seleccionado en el mapa"));
+  map.on("click", (e) => tocarMapa(e.latlng));
 }
 
 function marcadorNumero(lat, lon, n, tip) {
@@ -743,6 +744,7 @@ async function main() {
     return;
   }
   iniciarMapa();
+  iniciarCorte();
   iniciarBuscador();
   iniciarMunicipios();
   $("#leyenda").innerHTML = ZONAS_CORTAS.map((n, z) => `<li><i style="background:${color(z)}"></i><span><b>${n}.</b> ${EXPLICACION[z]}</span></li>`).join("");
@@ -761,4 +763,201 @@ async function main() {
   if (!m) tutorial();
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 }
+// ---------------------------------------------------------------- corte del terreno (vista bajo tierra)
+// El minero toca dos puntos y la app dibuja el perfil: la forma del terreno, a qué profundidad estaría la tierra negra
+// (Formación Muzo, estimada con la inclinación de las capas) y las fallas y pliegues que cruza. No muestra túneles.
+const CORTE_MAX_KM = 15, CORTE_N = 240;
+let modoCorte = 0, corteA = null, capaCorte = null, avisoCorte = null, botonCorte = null;
+
+function tocarMapa(ll) {
+  if (modoCorte) { puntoCorte(ll); return; }
+  seleccionar(ll.lat, ll.lng, "Punto seleccionado en el mapa");
+}
+function iniciarCorte() {
+  capaCorte = L.layerGroup().addTo(map);
+  const ctl = L.control({ position: "topright" });
+  ctl.onAdd = () => {
+    const b = L.DomUtil.create("button", "leaflet-control chip-lineas chip-corte");
+    b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14l5-6 4 4 3-3 6 5"/><path d="M3 20h18" stroke-dasharray="2 2"/><path d="M3 17h18"/></svg>Corte del terreno`;
+    L.DomEvent.disableClickPropagation(b);
+    b.onclick = () => (modoCorte ? salirCorte() : empezarCorte());
+    botonCorte = b; return b;
+  };
+  ctl.addTo(map);
+  if (!G.elev) botonCorte.hidden = true;
+}
+function empezarCorte() {
+  modoCorte = 1; corteA = null; capaCorte.clearLayers();
+  botonCorte.classList.add("activo"); botonCorte.lastChild.textContent = "Cancelar corte";
+  if (!avisoCorte) {
+    avisoCorte = L.DomUtil.create("div", "aviso-corte", map.getContainer());
+    L.DomEvent.disableClickPropagation(avisoCorte);
+  }
+  avisoCorte.hidden = false;
+  avisoCorte.innerHTML = `<b>Corte del terreno</b> · Toque el <b>punto A</b> en el mapa`;
+  map.getContainer().classList.add("cursor-corte");
+}
+function salirCorte() {
+  modoCorte = 0; corteA = null;
+  botonCorte.classList.remove("activo"); botonCorte.lastChild.textContent = "Corte del terreno";
+  if (avisoCorte) avisoCorte.hidden = true;
+  map.getContainer().classList.remove("cursor-corte");
+}
+const etiquetaCorte = (t) => L.divIcon({ className: "etq-corte", html: `<span>${t}</span>`, iconSize: [26, 26], iconAnchor: [13, 13] });
+function puntoCorte(ll) {
+  if (modoCorte === 1) {
+    corteA = ll; capaCorte.clearLayers();
+    L.marker(ll, { icon: etiquetaCorte("A"), interactive: false }).addTo(capaCorte);
+    modoCorte = 2; avisoCorte.innerHTML = `<b>Corte del terreno</b> · Ahora toque el <b>punto B</b> (hasta ${CORTE_MAX_KM} km)`;
+    return;
+  }
+  let B = ll;
+  const d = distKm(corteA.lat, corteA.lng, B.lat, B.lng);
+  if (d < 0.2) { avisoCorte.innerHTML = `<b>Corte del terreno</b> · El punto B está muy cerca de A: toque más lejos`; return; }
+  if (d > CORTE_MAX_KM) {   // se recorta a la distancia máxima en la misma dirección
+    const f = CORTE_MAX_KM / d;
+    B = L.latLng(corteA.lat + (B.lat - corteA.lat) * f, corteA.lng + (B.lng - corteA.lng) * f);
+  }
+  L.polyline([corteA, B], { color: "#fff", weight: 5, opacity: 0.9, interactive: false }).addTo(capaCorte);
+  L.polyline([corteA, B], { color: "#0a523d", weight: 3, dashArray: "8 6", interactive: false }).addTo(capaCorte);
+  L.marker(B, { icon: etiquetaCorte("B"), interactive: false }).addTo(capaCorte);
+  const A = corteA;
+  salirCorte();
+  mostrarCorte(A, B);
+}
+function distKm(la1, lo1, la2, lo2) {
+  const R = 6371, r = Math.PI / 180, dLa = (la2 - la1) * r, dLo = (lo2 - lo1) * r;
+  const h = Math.sin(dLa / 2) ** 2 + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin(dLo / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+// Cruces del segmento A–B con las líneas de un tipo (en grados; la distorsión es despreciable a esta escala)
+function crucesCorte(A, B, tipos) {
+  const out = [];
+  const ax = A.lng, ay = A.lat, bx = B.lng, by = B.lat;
+  const seg = (cx, cy, dx, dy) => {
+    const den = (bx - ax) * (dy - cy) - (by - ay) * (dx - cx);
+    if (Math.abs(den) < 1e-14) return null;
+    const t = ((cx - ax) * (dy - cy) - (cy - ay) * (dx - cx)) / den;
+    const u = ((cx - ax) * (by - ay) - (cy - ay) * (bx - ax)) / den;
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : null;
+  };
+  for (const f of D.estructuras.features) {
+    if (!tipos.includes(f.properties.tipo)) continue;
+    const g = f.geometry, lineas = g.type === "LineString" ? [g.coordinates] : g.type === "MultiLineString" ? g.coordinates : [];
+    for (const ln of lineas) for (let k = 1; k < ln.length; k++) {
+      const t = seg(ln[k - 1][0], ln[k - 1][1], ln[k][0], ln[k][1]);
+      if (t !== null) out.push({ t, nombre: f.properties.nombre || "" });
+    }
+  }
+  return out.sort((a, b) => a.t - b.t).filter((c, k, arr) => k === 0 || c.t - arr[k - 1].t > 0.01);
+}
+function mostrarCorte(A, B) {
+  const L_km = distKm(A.lat, A.lng, B.lat, B.lng);
+  const pts = [];
+  for (let k = 0; k <= CORTE_N; k++) {
+    const t = k / CORTE_N, lat = A.lat + (B.lat - A.lat) * t, lon = A.lng + (B.lng - A.lng) * t;
+    const i = indice(lat, lon);
+    const e = i >= 0 && G.elev[i] ? G.elev[i] : null;
+    const p = i >= 0 && G.prof[i] !== 255 ? { p: G.prof[i] * 5, lo: G.pmin[i] * 5, hi: G.pmax[i] * 5 } : null;
+    pts.push({ d: t * L_km, e, p, z: i >= 0 ? G.z[i] : null });
+  }
+  const val = pts.filter((q) => q.e !== null);
+  if (val.length < 10) {
+    $("#modal-cuerpo").innerHTML = `<h2>Corte del terreno</h2><p>El corte queda casi todo fuera del área estudiada. Trace la línea sobre la zona coloreada del mapa.</p>`;
+    $("#modal").hidden = false; return;
+  }
+  // Escala vertical
+  const prof = val.filter((q) => q.p);
+  let yMin = Math.min(...val.map((q) => q.e)), yMax = Math.max(...val.map((q) => q.e));
+  if (prof.length) yMin = Math.min(yMin, ...prof.map((q) => q.e - q.p.p));   // hasta el techo estimado; el margen se recorta
+  const pad = Math.max(40, (yMax - yMin) * 0.08);
+  yMin = Math.floor((yMin - 2 * pad) / 50) * 50; yMax = Math.ceil((yMax + pad) / 50) * 50;
+  const angosto = innerWidth < 600;   // en el celular el dibujo es más angosto para que el texto se lea
+  const W = angosto ? 400 : 780, H = angosto ? 330 : 380, m = { l: angosto ? 48 : 58, r: 14, t: 46, b: 44 };
+  const X = (d) => m.l + (d / L_km) * (W - m.l - m.r), Y = (e) => m.t + (1 - (e - yMin) / (yMax - yMin)) * (H - m.t - m.b);
+  const base = H - m.b;
+  // Tramos continuos con dato
+  const tramos = (cond) => { const out = []; let cur = []; for (const q of pts) { if (cond(q)) cur.push(q); else if (cur.length) { out.push(cur); cur = []; } } if (cur.length) out.push(cur); return out; };
+  let svg = `<svg viewBox="0 0 ${W} ${H}" class="corte-svg" role="img" aria-label="Corte del terreno entre A y B">`;
+  svg += `<defs><pattern id="rayas" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="#2d2a26"/><line x1="0" y1="0" x2="0" y2="7" stroke="#4a4540" stroke-width="3"/></pattern>` +
+    `<clipPath id="area-corte"><rect x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${base - m.t}"/></clipPath></defs>`;
+  svg += `<rect x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${base - m.t}" fill="#eef5f8"/>`;
+  // ejes y cuadrícula
+  const paso = [50, 100, 200, 250, 500].find((s) => (yMax - yMin) / s <= 7) || 1000;
+  for (let e = Math.ceil(yMin / paso) * paso; e <= yMax; e += paso)
+    svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(e)}" y2="${Y(e)}" class="rej"/><text x="${m.l - 6}" y="${Y(e) + 4}" class="eje" text-anchor="end">${e.toLocaleString("es-CO")}</text>`;
+  const pasoX = [0.5, 1, 2, 2.5, 5].find((s) => L_km / s <= 8) || 5;
+  for (let d = 0; d <= L_km + 1e-9; d += pasoX)
+    svg += `<text x="${X(d)}" y="${base + 18}" class="eje" text-anchor="middle">${fmtNum(d, pasoX < 1 ? 1 : 0)} km</text>`;
+  svg += `<text x="14" y="${(m.t + base) / 2}" class="eje" transform="rotate(-90 14 ${(m.t + base) / 2})" text-anchor="middle">Altura (m s. n. m.)</text>`;
+  svg += `<g clip-path="url(#area-corte)">`;
+  // terreno (relleno de tierra)
+  for (const tr of tramos((q) => q.e !== null)) {
+    const linea = tr.map((q) => `${X(q.d).toFixed(1)},${Y(q.e).toFixed(1)}`).join(" ");
+    svg += `<polygon points="${X(tr[0].d)},${base} ${linea} ${X(tr[tr.length - 1].d)},${base}" fill="#e3d3b0"/>`;
+  }
+  // tierra negra estimada bajo la Formación Capotes: banda de incertidumbre + techo estimado + relleno
+  for (const tr of tramos((q) => q.e !== null && q.p && q.p.p >= 10)) {
+    const techo = tr.map((q) => `${X(q.d).toFixed(1)},${Y(q.e - q.p.p).toFixed(1)}`).join(" ");
+    svg += `<polygon points="${X(tr[0].d)},${base} ${techo} ${X(tr[tr.length - 1].d)},${base}" fill="url(#rayas)" opacity=".8"/>`;
+    const sup = tr.map((q) => `${X(q.d).toFixed(1)},${Y(q.e - q.p.lo).toFixed(1)}`), inf = tr.map((q) => `${X(q.d).toFixed(1)},${Y(q.e - q.p.hi).toFixed(1)}`).reverse();
+    svg += `<polygon points="${sup.concat(inf).join(" ")}" fill="#f59e0b" opacity=".28"/>`;
+    svg += `<polyline points="${techo}" fill="none" stroke="#111" stroke-width="2.5"/>`;
+  }
+  // tierra negra en la superficie: sigue hacia abajo
+  for (const tr of tramos((q) => q.e !== null && q.p && q.p.p < 10)) {
+    const linea = tr.map((q) => `${X(q.d).toFixed(1)},${Y(q.e).toFixed(1)}`).join(" ");
+    svg += `<polygon points="${X(tr[0].d)},${base} ${linea} ${X(tr[tr.length - 1].d)},${base}" fill="url(#rayas)" opacity=".8"/>`;
+    svg += `<polyline points="${linea}" fill="none" stroke="#111" stroke-width="7" stroke-linecap="round"/>`;
+  }
+  // línea del terreno
+  for (const tr of tramos((q) => q.e !== null))
+    svg += `<polyline points="${tr.map((q) => `${X(q.d).toFixed(1)},${Y(q.e).toFixed(1)}`).join(" ")}" fill="none" stroke="#6b4f2a" stroke-width="2"/>`;
+  svg += `</g>`;
+  // franja de colores: qué tan favorable es cada tramo
+  const dx = (W - m.l - m.r) / CORTE_N;
+  pts.forEach((q, k) => { if (q.z !== null) svg += `<rect x="${(X(q.d) - dx / 2).toFixed(1)}" y="${m.t - 16}" width="${(dx + 0.6).toFixed(1)}" height="10" fill="${color(q.z)}"/>`; });
+  svg += `<text x="${m.l}" y="${m.t - 22}" class="eje">Qué tan favorable es en la superficie</text>`;
+  // fallas y crestas de pliegue
+  const elevEn = (t) => { const q = pts[Math.round(t * CORTE_N)]; return q && q.e !== null ? q.e : null; };
+  const fallas = crucesCorte(A, B, ["falla", "falla_inversa"]), pliegues = crucesCorte(A, B, ["charnela"]);
+  for (const c of fallas) {
+    const x = X(c.t * L_km), e = elevEn(c.t); if (e === null) continue;
+    svg += `<line x1="${x}" x2="${x + 14}" y1="${Y(e)}" y2="${base}" stroke="#fff" stroke-width="5" opacity=".8"/><line x1="${x}" x2="${x + 14}" y1="${Y(e)}" y2="${base}" stroke="#111" stroke-width="2.5" stroke-dasharray="7 5"/>`;
+    svg += `<text x="${x}" y="${Y(e) - 7}" class="etq" text-anchor="middle">Falla</text>`;
+  }
+  for (const c of pliegues) {
+    const x = X(c.t * L_km), e = elevEn(c.t); if (e === null) continue;
+    svg += `<path d="M${x - 9},${Y(e) - 6} L${x},${Y(e) - 15} L${x + 9},${Y(e) - 6}" fill="none" stroke="#00b8d4" stroke-width="3"/><text x="${x}" y="${Y(e) - 19}" class="etq azul" text-anchor="middle">Pliegue</text>`;
+  }
+  // A y B
+  svg += `<text x="${X(0)}" y="${base + 34}" class="ab" text-anchor="start">A</text><text x="${X(L_km)}" y="${base + 34}" class="ab" text-anchor="end">B</text>`;
+  svg += `</svg>`;
+
+  // resumen en palabras
+  const nVal = val.length, aflora = val.filter((q) => q.p && q.p.p < 10).length, bajo = val.filter((q) => q.p && q.p.p >= 10);
+  let resumen = "";
+  if (aflora) resumen += `La tierra negra <b>está en la superficie</b> en ${Math.round((100 * aflora) / nVal)} % del recorrido (línea negra gruesa). `;
+  if (bajo.length) {
+    const ps = bajo.map((q) => q.p.p).sort((a, b) => a - b), r10 = (v) => Math.round(v / 10) * 10;
+    resumen += `En ${Math.round((100 * bajo.length) / nVal)} % del recorrido estaría <b>enterrada</b>, a entre unos ${r10(ps[0])} y ${r10(ps[ps.length - 1])} m bajo el terreno. `;
+  }
+  if (!aflora && !bajo.length) resumen += "En este recorrido no hay dato de la tierra negra: está lejos de ella o no se puede estimar. ";
+  if (fallas.length) resumen += `El corte cruza ${fallas.length} falla${fallas.length > 1 ? "s" : ""}${pliegues.length ? ` y ${pliegues.length} cresta${pliegues.length > 1 ? "s" : ""} de pliegue` : ""}. `;
+  else if (pliegues.length) resumen += `Cruza ${pliegues.length} cresta${pliegues.length > 1 ? "s" : ""} de pliegue. `;
+
+  $("#modal-cuerpo").innerHTML = `<h2>Corte del terreno</h2><div class="hint">De A a B · ${fmtKm(L_km)} · la escala de altura está aumentada para que se vea la forma</div>
+    <p class="corte-resumen">${resumen}</p><div class="corte-wrap">${svg}</div>
+    <ul class="leyenda corte-ley">
+      <li><i style="background:#e3d3b0"></i><span>Terreno (cerro visto de lado)</span></li>
+      <li><i style="background:#111"></i><span><b>Tierra negra en la superficie</b> (Formación Muzo, donde se forma la esmeralda)</span></li>
+      <li><i style="background:repeating-linear-gradient(45deg,#2d2a26 0 3px,#4a4540 3px 6px)"></i><span><b>Tierra negra enterrada</b> (estimada) bajo la Formación Capotes. La línea negra es su techo</span></li>
+      <li><i style="background:#f59e0b;opacity:.5"></i><span>Margen de error del techo de la tierra negra</span></li>
+      <li><i style="border-top:3px dashed #111;height:0;margin-top:9px"></i><span>Falla (inclinación dibujada solo como referencia)</span></li>
+    </ul>
+    <p class="hint">Cálculo aproximado con la inclinación de las capas medida por el Servicio Geológico en la región: el error puede ser de decenas de metros. Sirve para hacerse una idea de qué tan hondo está la roca favorable, no para planear un túnel. No muestra túneles ni minas.</p>`;
+  $("#modal").hidden = false;
+  map.fitBounds(L.latLngBounds([A, B]).pad(0.25));
+}
+
 main();

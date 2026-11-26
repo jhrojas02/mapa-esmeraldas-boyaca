@@ -314,6 +314,28 @@ ul.porque li { margin: 4px 0; }
 .leyenda-mapa .tit { font-weight: 700; font-size: .66rem; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
 .leyenda-mapa .ln.falla { border-top: 3px dashed #111; filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1px #fff); }
 .leyenda-mapa .ln { display: inline-block; width: 18px; margin-right: 8px; vertical-align: 3px; filter: drop-shadow(0 0 1px #000); }
+.chip-corte { margin-top: 8px !important; }
+.aviso-corte {
+  position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 800; max-width: calc(100% - 120px);
+  background: var(--brand-800); color: #fff; padding: 9px 16px; border-radius: 999px; font-size: .85rem; box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+.aviso-corte[hidden] { display: none; }
+.cursor-corte, .cursor-corte .leaflet-interactive { cursor: crosshair !important; }
+.etq-corte span {
+  display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%;
+  background: #fff; color: var(--brand-800); font-weight: 800; border: 3px solid var(--brand-700); box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+}
+.corte-wrap { overflow-x: auto; margin: 6px 0 4px; }
+.corte-svg { width: 100%; height: auto; display: block; font-family: var(--font); }
+@media (max-width: 760px) { .corte-svg .eje { font-size: 11px; } .corte-svg .etq { font-size: 12px; } }
+.corte-svg .rej { stroke: #cfdde3; stroke-width: 1; }
+.corte-svg .eje { font-size: 12px; fill: #5b6b64; }
+.corte-svg .etq { font-size: 12px; font-weight: 700; fill: #111; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+.corte-svg .etq.azul { fill: #007f94; }
+.corte-svg .ab { font-size: 16px; font-weight: 800; fill: var(--brand-800); }
+.corte-resumen { font-size: .95rem; color: var(--ink); }
+.corte-ley li { font-size: .84rem; }
 .pixelado { image-rendering: pixelated; image-rendering: crisp-edges; }
 
 /* ---------------------------------------------------------------- pantalla de carga */
