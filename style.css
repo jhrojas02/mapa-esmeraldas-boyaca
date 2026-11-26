@@ -74,6 +74,9 @@ main { flex: 1; display: flex; min-height: 0; }
 .etiqueta-mun { background: none; border: 0; box-shadow: none; color: #111; font-weight: 700; font-size: 11px;
   text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
 
+.etiqueta-hoja { background: none; border: 0; box-shadow: none; color: #ffd400; font-weight: 800; font-size: 14px;
+  text-shadow: 0 0 3px #000, 0 0 3px #000; }
+
 .num span { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%;
   background: #a50f15; color: #fff; font-weight: 700; font-size: 13px; border: 2px solid #fff; box-shadow: 0 1px 4px #0006; }
 

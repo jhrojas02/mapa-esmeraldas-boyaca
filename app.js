@@ -67,6 +67,32 @@ function b64(s, Tipo = Uint8Array) {
 // ---------------------------------------------------------------- grilla (EPSG:9377)
 const aXY = (lat, lon) => proj4(G.proj4, [lon, lat]);
 const aLatLon = (x, y) => { const [lon, lat] = proj4(G.proj4).inverse([x, y]); return [lat, lon]; };
+// Cuadrícula del formulario de la encuesta: cuadros de 1 km numerados desde la esquina noroeste del área
+// (columna de oeste a este, fila de norte a sur); hojas de 9 × 6 cuadros, letra A–J por filas y número 1–6 por columnas.
+const HOJA_C = 9, HOJA_F = 6, LETRAS = "ABCDEFGHIJ";
+function cuadroEncuesta(lat, lon) {
+  const [x, y] = aXY(lat, lon);
+  const col = Math.floor((x - G.x0) / 1000) + 1, fila = Math.floor((G.y0 - y) / 1000) + 1;
+  const hf = Math.floor((fila - 1) / HOJA_F), hc = Math.floor((col - 1) / HOJA_C);
+  if (col < 1 || fila < 1 || hf >= LETRAS.length || hc >= 6) return null;
+  return { hoja: `${LETRAS[hf]}${hc + 1}`, col, fila };
+}
+function capaCuadricula() {
+  const hojas = L.layerGroup(), km = L.layerGroup();
+  const ll = (x, y) => aLatLon(G.x0 + x * 1000, G.y0 - y * 1000);
+  const nC = Math.ceil(G.W * G.res / 1000), nF = Math.ceil(G.H * G.res / 1000);
+  for (let hf = 0; hf * HOJA_F < nF && hf < LETRAS.length; hf++) for (let hc = 0; hc * HOJA_C < nC && hc < 6; hc++) {
+    const x0 = hc * HOJA_C, y0 = hf * HOJA_F, x1 = x0 + HOJA_C, y1 = y0 + HOJA_F;
+    L.polygon([ll(x0, y0), ll(x1, y0), ll(x1, y1), ll(x0, y1)], { color: "#ffd400", weight: 2, fill: false, interactive: false })
+      .bindTooltip(`${LETRAS[hf]}${hc + 1}`, { permanent: true, direction: "center", className: "etiqueta-hoja" }).addTo(hojas);
+  }
+  for (let c = 0; c <= nC; c++) L.polyline([ll(c, 0), ll(c, nF)], { color: "#ffd400", weight: 0.6, opacity: 0.7, interactive: false }).addTo(km);
+  for (let f = 0; f <= nF; f++) L.polyline([ll(0, f), ll(nC, f)], { color: "#ffd400", weight: 0.6, opacity: 0.7, interactive: false }).addTo(km);
+  const g = L.layerGroup([hojas]);
+  const verKm = () => { if (map.getZoom() >= 12 && map.hasLayer(g)) g.addLayer(km); else g.removeLayer(km); };
+  map.on("zoomend", verKm); g.on("add", verKm);
+  return g;
+}
 const centro = (i) => [G.x0 + ((i % G.W) + 0.5) * G.res, G.y0 - (Math.floor(i / G.W) + 0.5) * G.res];
 function indice(lat, lon) {
   const [x, y] = aXY(lat, lon);
@@ -180,6 +206,7 @@ function iniciarMapa() {
     "Profundidad de la Fm. Muzo": capaProf,
     "Títulos mineros (ANM)": capaTitulos,
     "Municipios": capaMunicipios,
+    "Cuadrícula de la encuesta (hojas y cuadros de 1 km)": capaCuadricula(),
   };
   L.control.layers({ "Satélite": satelite, "Calles": calles, "Relieve": topo }, capas, { collapsed: true }).addTo(map);
   L.control.scale({ imperial: false }).addTo(map);
@@ -465,6 +492,8 @@ function seleccionar(lat, lon, titulo, subtitulo = "") {
 
   let html = `<h2>${esc(titulo)}</h2>${subtitulo ? `<div class="hint">${esc(subtitulo)}</div>` : ""}`;
   html += `<div class="coords">${lat.toFixed(5)}, ${lon.toFixed(5)} · <a href="https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}" target="_blank" rel="noopener">abrir en Google Maps</a> · <a href="#" id="compartir">compartir este punto</a></div>`;
+  const cu = cuadroEncuesta(lat, lon);
+  if (cu) html += `<div class="hint">Mapa de la encuesta: hoja <b>${cu.hoja}</b>, cuadro columna <b>${cu.col}</b>, fila <b>${cu.fila}</b></div>`;
   const corr = corredorCercano(lat, lon);
   html += cajaPunto(i) + (i >= 0 && G.z[i] !== 5 ? `<div class="caja" id="porque"><h3>¿Por qué?</h3><div class="hint">Cargando la explicación…</div></div>` : "") +
     cajaCorredor(lat, lon) + cajaProfundidad(i);
