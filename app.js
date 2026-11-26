@@ -42,21 +42,23 @@ const ESTILO_CORREDOR = {
   prioritario: { color: "#7a0177", fillColor: "#f768a1", weight: 1.5, fillOpacity: 0.55 },
   secundario: { color: "#b8860b", fillColor: "#ffd92f", weight: 1, fillOpacity: 0.4 },
 };
-const ESTILO_ESTRUCTURA = {
-  falla: { color: "#111", weight: 2, dashArray: "6 4" },
-  falla_inversa: { color: "#d7301f", weight: 2.5 },
-  charnela: { color: "#6a3d9a", weight: 3 },
-  contacto_muzo_capotes: { color: "#ffffff", weight: 2, dashArray: "2 4" },
-  lineamiento: { color: "#9e9e9e", weight: 1.2, opacity: 0.8 },
-  lineamiento_nne: { color: "#ff9800", weight: 2.2, opacity: 0.95 },
-  lineamiento_nw: { color: "#00bcd4", weight: 1.8, opacity: 0.9 },
+// Borde de cada línea para que se vea sobre el satélite (y no se confunda la falla con los límites municipales)
+const BORDE_LINEA = { falla: "#ffffff", fractura: "#3a2a00", pliegue: "#00343a" };
+// Líneas del mapa: solo 3 tipos, en palabras sencillas. Las demás (fracturas en otras direcciones, contactos) se
+// omiten porque casi no pesan en el mapa y confunden.
+const LINEA_DE = { falla: "falla", falla_inversa: "falla", charnela: "pliegue", lineamiento_nne: "fractura" };
+const ESTILO_LINEA = {
+  falla: { color: "#111111", weight: 3, dashArray: "9 6", opacity: 1 },
+  fractura: { color: "#ffb300", weight: 3, opacity: 0.95 },
+  pliegue: { color: "#00e5ff", weight: 4, opacity: 0.95 },
 };
-const NOMBRE_ESTRUCTURA = {
-  falla: "Falla", falla_inversa: "Falla inversa", charnela: "Cresta de anticlinal en roca favorable",
-  contacto_muzo_capotes: "Contacto Fm. Muzo – Fm. Capotes",
-  lineamiento: "Fractura vista en el relieve (otra dirección)",
-  lineamiento_nne: "Fractura del relieve norte-noreste (dirección de las fallas por donde subieron los fluidos en Muzo y Coscuez)",
-  lineamiento_nw: "Fractura del relieve noroeste (dirección de muchas vetas)",
+const TEXTO_LINEA = {
+  falla: ["Falla", "Grieta grande donde la roca se partió y se movió. Por las fallas subió el agua caliente que formó la esmeralda.",
+    "Del mapa geológico del Servicio Geológico Colombiano."],
+  fractura: ["Fractura del terreno", "Valle o quiebre recto que suele marcar roca rota. Va en la misma dirección que las fallas de la esmeralda en Muzo y Coscuez (hacia el norte-noreste).",
+    "La encontró el programa en la forma del terreno: confírmela en el campo, puede ser un camino o una quebrada."],
+  pliegue: ["Cresta de un pliegue", "Donde las capas de roca se doblan hacia arriba. Ahí la roca se raja y se abren vetas.",
+    "Del mapa geológico del Servicio Geológico Colombiano."],
 };
 const RADIO_KM = 5;
 const AREA_MIN_KM2 = 0.25;
@@ -189,7 +191,7 @@ async function cargar() {
 
 // ---------------------------------------------------------------- mapa
 function iniciarMapa() {
-  map = L.map("map", { zoomControl: false, preferCanvas: true, maxZoom: 19 });
+  map = L.map("map", { zoomControl: false, preferCanvas: true, renderer: L.canvas({ tolerance: 10 }), maxZoom: 19 });
   L.control.zoom({ position: "topright" }).addTo(map);
   const satelite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     { maxZoom: 19, maxNativeZoom: 18, attribution: "Imagen: Esri, Maxar, Earthstar Geographics" });
@@ -205,10 +207,23 @@ function iniciarMapa() {
     style: (f) => ESTILO_CORREDOR[f.properties.tipo],
     onEachFeature: (f, l) => l.on("click", (e) => { L.DomEvent.stop(e); seleccionar(e.latlng.lat, e.latlng.lng, "Punto seleccionado en el mapa"); }),
   });
-  capaEstructuras = L.geoJSON(D.estructuras, {
-    style: (f) => ESTILO_ESTRUCTURA[f.properties.tipo] || ESTILO_ESTRUCTURA.falla,
-    onEachFeature: (f, l) => l.bindTooltip(`${NOMBRE_ESTRUCTURA[f.properties.tipo] || "Falla"}${f.properties.nombre ? ": " + esc(f.properties.nombre) : ""}`, { sticky: true }),
+  const bordes = L.geoJSON(D.estructuras, {
+    filter: (f) => LINEA_DE[f.properties.tipo], interactive: false,
+    style: (f) => { const t = LINEA_DE[f.properties.tipo]; return { color: BORDE_LINEA[t], weight: ESTILO_LINEA[t].weight + 3, opacity: 0.75 }; },
   });
+  const lineas = L.geoJSON(D.estructuras, {
+    filter: (f) => LINEA_DE[f.properties.tipo],
+    style: (f) => ESTILO_LINEA[LINEA_DE[f.properties.tipo]],
+    onEachFeature: (f, l) => {
+      const [t, d, fuente] = TEXTO_LINEA[LINEA_DE[f.properties.tipo]];
+      l.bindPopup(`<div class="pop-linea"><b>${t}${f.properties.nombre ? ": " + esc(f.properties.nombre) : ""}</b><p>${d}</p><small>${fuente}</small></div>`,
+        { maxWidth: 260, autoPan: true });
+      const w = ESTILO_LINEA[LINEA_DE[f.properties.tipo]].weight;
+      l.on("mouseover", () => l.setStyle({ weight: w + 3 })); l.on("mouseout", () => l.setStyle({ weight: w }));
+      l.on("click", (e) => L.DomEvent.stop(e));
+    },
+  });
+  capaEstructuras = L.layerGroup([bordes, lineas]);
   capaTitulos = L.geoJSON(D.titulos, {
     style: { color: "#00e5ff", weight: 1.5, fill: true, fillOpacity: 0.04, dashArray: "4 3" },
     interactive: false,
@@ -225,8 +240,8 @@ function iniciarMapa() {
   capaCercanas = L.layerGroup().addTo(map);
   const capas = {
     "Zonas de potencial": capaZonas,
-    "Franjas para recorrer (de cerca)": capaCorredores,
-    "Fallas, pliegues y contactos (de cerca)": capaEstructuras,
+    "Sitios para buscar (de cerca)": capaCorredores,
+    "Fallas y fracturas (de cerca)": capaEstructuras,
     "Profundidad de la Fm. Muzo": capaProf,
     "Títulos mineros (ANM)": capaTitulos,
     "Municipios": capaMunicipios,
@@ -236,7 +251,7 @@ function iniciarMapa() {
   L.control.scale({ imperial: false }).addTo(map);
 
   // Corredores y estructuras: solo de cerca (en la vista general serían ruido). El usuario puede apagarlos.
-  const quiere = { corr: true, est: true };
+  const quiere = { corr: true, est: false };
   map.on("overlayadd", (e) => { if (e.layer === capaCorredores) quiere.corr = true; if (e.layer === capaEstructuras) quiere.est = true; });
   map.on("overlayremove", (e) => { if (e.layer === capaCorredores && map.getZoom() >= ZOOM_DETALLE) quiere.corr = false;
     if (e.layer === capaEstructuras && map.getZoom() >= ZOOM_DETALLE) quiere.est = false; });
@@ -250,13 +265,31 @@ function iniciarMapa() {
     $("#aviso-zoom").hidden = cerca;
   };
   map.on("zoomend", porZoom);
+  const botonLineas = L.control({ position: "topright" });
+  botonLineas.onAdd = () => {
+    const b = L.DomUtil.create("button", "leaflet-control chip-lineas");
+    const pintar = () => { b.classList.toggle("activo", quiere.est); b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17 9 7l4 6 3-4 5 8"/></svg>${quiere.est ? "Ocultar fallas y fracturas" : "Ver fallas y fracturas"}`; };
+    L.DomEvent.disableClickPropagation(b);
+    b.onclick = () => {
+      quiere.est = !quiere.est; pintar();
+      if (quiere.est && map.getZoom() < ZOOM_DETALLE) map.setZoom(ZOOM_DETALLE); else porZoom();
+      if (!quiere.est && map.hasLayer(capaEstructuras)) map.removeLayer(capaEstructuras);
+    };
+    map.on("overlayadd overlayremove", pintar);
+    pintar(); return b;
+  };
+  botonLineas.addTo(map);
 
   const ley = L.control({ position: "bottomright" });   // se oculta en celulares (CSS)
   ley.onAdd = () => {
     const div = L.DomUtil.create("div", "leaflet-control leyenda-mapa");
     div.innerHTML = ZONAS_CORTAS.map((n, z) => `<div><i style="background:${color(z)}"></i>${n}</div>`).join("") +
-      `<div class="sep"></div><div><i style="background:${ESTILO_CORREDOR.prioritario.fillColor};border-color:${ESTILO_CORREDOR.prioritario.color}"></i>Franja prioritaria para recorrer</div>` +
-      `<div><i style="background:${ESTILO_CORREDOR.secundario.fillColor};border-color:${ESTILO_CORREDOR.secundario.color}"></i>Franja secundaria para recorrer</div>`;
+      `<div class="sep"></div><div class="tit">Al acercarse</div>` +
+      `<div><i style="background:${ESTILO_CORREDOR.prioritario.fillColor};border-color:${ESTILO_CORREDOR.prioritario.color}"></i>Buscar aquí primero</div>` +
+      `<div><i style="background:${ESTILO_CORREDOR.secundario.fillColor};border-color:${ESTILO_CORREDOR.secundario.color}"></i>Vale la pena revisar</div>` +
+      `<div><b class="ln falla"></b>Falla</div>` +
+      `<div><b class="ln" style="border-top:3px solid #ffb300"></b>Fractura del terreno</div>` +
+      `<div><b class="ln" style="border-top:4px solid #00e5ff"></b>Cresta de pliegue</div>`;
     return div;
   };
   ley.addTo(map);
@@ -288,9 +321,9 @@ function cajaCorredor(lat, lon) {
   if (!fs.length) return "";
   const p = fs.sort((a, b) => (a.properties.tipo === "prioritario" ? -1 : 1))[0].properties;
   const razones = Object.keys(CRITERIOS).filter((k) => p[k]).map((k) => `<li>${CRITERIOS[k]}</li>`).join("");
-  return `<div class="caja corredor ${p.tipo}"><h3>Está en una franja ${p.tipo === "prioritario" ? "prioritaria" : "secundaria"} para recorrer</h3>` +
-    `<div>Franja de tierra negra (o de las rocas vecinas a menos de 1 km) que además está:</div><ul>${razones}</ul>` +
-    `<div class="hint">Recórrala por quebradas y cortes de camino buscando las señales de la “Guía de campo”. Es una franja, no un punto exacto (error de 50 a 100 m).</div></div>`;
+  return `<div class="caja corredor ${p.tipo}"><h3>${p.tipo === "prioritario" ? "Sitio para buscar primero" : "Sitio que vale la pena revisar"}</h3>` +
+    `<div>Aquí hay tierra negra (o rocas vecinas a menos de 1 km) y además está:</div><ul>${razones}</ul>` +
+    `<div class="hint">Recórralo por quebradas y cortes de camino buscando las señales de la “Guía de campo”. Es un sitio para recorrer, no un punto exacto (error de 50 a 100 m).</div></div>`;
 }
 function cajaProfundidad(i) {
   if (i < 0 || G.prof[i] === 255) return "";
@@ -485,7 +518,7 @@ function tutorial() {
     ["Bienvenido", "Esta es una <b>guía de exploración</b>: muestra dónde el terreno se parece a donde hoy hay minas de esmeralda. No garantiza que haya esmeralda."],
     ["Colores", "<b>Rojo</b>: favorable, se parece a donde hay minas. <b>Azul</b>: poco favorable. <b>Gris</b>: no se sabe. Mientras más fuerte el color, más seguro está el mapa."],
     ["¿Qué hay donde estoy?", "Toque el botón verde <b>¿Qué hay donde estoy?</b> o escriba el nombre de su vereda. También puede tocar cualquier punto del mapa. La app le dice en una frase si ese sitio es favorable y <b>por qué</b>."],
-    ["Acérquese", "De cerca aparecen las <b>franjas para recorrer</b> (rosado y amarillo): tierra negra junto a fallas, pliegues y fracturas. Son los lugares para buscar primero."],
+    ["Acérquese", "De cerca aparecen los <b>sitios para buscar</b>: en rosado, <b>buscar aquí primero</b>; en amarillo, <b>vale la pena revisar</b>. Son tierra negra junto a fallas, pliegues o fracturas. Con el botón <b>Ver fallas y fracturas</b> puede ver esas líneas y tocarlas para saber qué son."],
     ["Sin señal", "Antes de salir al monte, busque su municipio o vereda y toque <b>Guardar para usar sin señal</b>. Revise siempre los títulos mineros antes de trabajar."],
   ];
   let k = 0;
@@ -545,9 +578,9 @@ function seleccionar(lat, lon, titulo, subtitulo = "") {
   if (enTitulo) html += cajaTitulo(lat, lon);
   // 4. Hacia dónde caminar
   const corr = corredorCercano(lat, lon);
-  if (corr) html += `<div class="caja"><h3>¿Hacia dónde camino?</h3>${corr.d < 0.03 ? "Está <b>dentro</b> de una franja prioritaria para recorrer." :
-    `La franja prioritaria más cercana está a <b>${fmtKm(corr.d)} al ${corr.dir}</b>.`}
-    <button class="btn" id="ir-corredor">Ver esa franja en el mapa</button></div>`;
+  if (corr) html += `<div class="caja"><h3>¿Hacia dónde camino?</h3>${corr.d < 0.03 ? "Está <b>dentro</b> de un sitio para buscar primero." :
+    `El sitio para buscar primero más cercano está a <b>${fmtKm(corr.d)} al ${corr.dir}</b>.`}
+    <button class="btn" id="ir-corredor">Ver ese sitio en el mapa</button></div>`;
   html += cajaCorredor(lat, lon);
   // 5. Sin señal
   if (mun) html += `<button class="btn guardar" id="guardar-aqui"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Guardar ${esc(mun.properties.shapeName)} para usar sin señal</button>`;
@@ -568,10 +601,10 @@ function seleccionar(lat, lon, titulo, subtitulo = "") {
     html += `<div class="caja"><h3>Zonas favorables más cercanas</h3><ul class="cerca">` +
       cerca.map((a, k) => `<li data-lat="${a.latC}" data-lon="${a.lonC}"><b>${k + 1}.</b> ${dondeTxt(a)}` +
         ` · ${fmtNum(a.km2)} km²${a.municipio ? ` · ${esc(a.municipio)}` : ""}` +
-        `<br><small class="hint">${a.confianza_alta_pct} % muy favorable · toque para ir y ver las franjas</small></li>`).join("") + `</ul></div>`;
+        `<br><small class="hint">${a.confianza_alta_pct} % muy favorable · toque para ir y ver los sitios para buscar</small></li>`).join("") + `</ul></div>`;
   }
   if (i >= 0 && !enTitulo) html += cajaTitulo(lat, lon);
-  html += `<button class="btn" id="gpx">Descargar para GPS (punto, zonas y franjas cercanas)</button></details>`;
+  html += `<button class="btn" id="gpx">Descargar para GPS (punto, zonas y sitios para buscar)</button></details>`;
   $("#detalle").innerHTML = html;
   $("#detalle").querySelectorAll(".cerca li").forEach((li) =>
     li.addEventListener("click", () => map.flyTo([+li.dataset.lat, +li.dataset.lon], 15)));

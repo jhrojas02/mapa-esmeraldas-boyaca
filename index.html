@@ -55,7 +55,7 @@
       <p class="hint">También puede tocar cualquier punto del mapa.</p>
       <div class="consejo" id="consejo-senal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><path d="M12 19h.01"/><path d="M3 3l18 18"/></svg>
         <div><b>¿Va al monte sin señal?</b> Antes de salir, busque su vereda o municipio y toque <b>Guardar para usar sin señal</b>.</div></div>
-      <p class="hint" id="aviso-zoom">Acérquese al mapa para ver las <b>franjas para recorrer</b>, las fallas y los pliegues.</p>
+      <p class="hint" id="aviso-zoom">Acérquese al mapa para ver los <b>sitios para buscar</b>.</p>
       <div id="detalle"></div>
     </section>
 
@@ -67,7 +67,7 @@
     <section id="tab-campo" class="tab-body">
       <h3>Qué buscar en el terreno</h3>
       <p class="hint">Señales que acompañan a la esmeralda en el cinturón de Muzo y Coscuez, según los estudios geológicos
-        de la región. Ninguna sola es prueba; varias juntas en una franja sí son buena señal.</p>
+        de la región. Ninguna sola es prueba; varias juntas en un sitio para buscar sí son buena señal.</p>
       <ul class="guia">
         <li><b>Lutita negra</b> (roca oscura, en capas finas, que mancha los dedos) de la Formación Muzo o Paja. Es la roca donde se forma la esmeralda.</li>
         <li><b>Vetas blancas de calcita</b>, a veces con <b>dolomita</b> (tono crema) y <b>pirita</b> (cristales dorados, “oro de tontos”). Las vetas con esmeralda casi siempre van con calcita.</li>
@@ -77,11 +77,11 @@
         <li><b>Cresta de los pliegues</b> (donde las capas cambian de inclinación) y <b>cruces de fallas</b>: allí la roca se fractura y los fluidos circulan.</li>
         <li>Direcciones de vetas conocidas: más o menos <b>noroeste (N40°W)</b> y <b>norte-noreste (N10°E)</b>.</li>
       </ul>
-      <h3>Cómo usar las franjas para recorrer</h3>
+      <h3>Cómo usar los sitios para buscar</h3>
       <ol class="guia">
-        <li>Busque su vereda o use su ubicación y acérquese hasta ver las franjas (rosado = prioritaria, amarillo = secundaria).</li>
-        <li>Toque una franja: la app dice por qué está marcada (pliegue, falla o cruce de fallas).</li>
-        <li>Recorra la franja por quebradas y cortes de camino, donde la roca se ve sin vegetación, buscando las señales de arriba.</li>
+        <li>Busque su vereda o use su ubicación y acérquese hasta ver los sitios para buscar (rosado = buscar aquí primero, amarillo = vale la pena revisar).</li>
+        <li>Toque un sitio: la app dice por qué está marcado (pliegue, falla o cruce de fallas).</li>
+        <li>Recórralo por quebradas y cortes de camino, donde la roca se ve sin vegetación, buscando las señales de arriba.</li>
         <li>La capa “Profundidad de la Fm. Muzo” (menú de capas, arriba a la derecha) indica si la roca favorable está en superficie o enterrada.</li>
       </ol>
       <h3>Antes de excavar</h3>
@@ -95,21 +95,22 @@
     <section id="tab-ayuda" class="tab-body">
       <h3>Qué significan los colores</h3>
       <ul id="leyenda" class="leyenda"></ul>
-      <h3>Franjas para recorrer</h3>
-      <p>Al acercarse aparecen franjas a 30 m dentro de las zonas favorables: roca favorable (Fm. Muzo o Paja, o las
-        formaciones vecinas a menos de 1 km) cerca de la <b>cresta de un pliegue</b>, de una <b>falla</b>, de un
-        <b>cruce de fallas</b> o de una <b>fractura que se ve en el relieve</b> (valle o quiebre recto). Son
-        <b>prioritarios</b> (rosado) si cumplen dos o más de esas condiciones en una zona de potencial alto, y
-        <b>secundarios</b> (amarillo) si cumplen menos. En los datos conocidos, el 36 % de los registros de esmeralda está a menos de 100 m de un corredor prioritario, que ocupa solo el 0,5 % del área. Salen de la geología publicada, no de la ubicación de minas.</p>
-      <h3>Líneas del mapa (de cerca)</h3>
+      <h3>Sitios para buscar</h3>
+      <p>Al acercarse aparecen manchas de color dentro de las zonas favorables. Marcan tierra negra (Formación Muzo o Paja,
+        o las rocas vecinas a menos de 1 km) que además está cerca de la <b>cresta de un pliegue</b>, de una <b>falla</b>,
+        de un <b>cruce de fallas</b> o de una <b>fractura del terreno</b>.</p>
+      <ul class="leyenda">
+        <li><i style="background:#f768a1"></i><span><b>Buscar aquí primero</b> (rosado): se juntan dos o más de esas señales en una zona favorable.</span></li>
+        <li><i style="background:#ffd92f"></i><span><b>Vale la pena revisar</b> (amarillo): hay menos señales.</span></li>
+      </ul>
+      <p>Salen de los mapas geológicos públicos, no de la ubicación de minas. Aun así, más o menos 1 de cada 3 minas
+        registradas está a menos de 100 m de un sitio para buscar primero, y esos sitios ocupan solo el 0,5 % del área.</p>
+      <h3>Fallas y fracturas</h3>
+      <p>Se ven con el botón <b>Ver fallas y fracturas</b> del mapa. Toque una línea para saber qué es.</p>
       <ul class="leyenda lineas">
-        <li><i style="border-top:3px solid #d7301f"></i>Falla inversa (mapa del Servicio Geológico)</li>
-        <li><i style="border-top:2px dashed #111"></i>Otra falla del mapa geológico</li>
-        <li><i style="border-top:3px solid #6a3d9a"></i>Cresta de un pliegue (anticlinal) en roca favorable</li>
-        <li><i style="border-top:2px dotted #fff;background:#888"></i>Contacto Formación Muzo – Formación Capotes</li>
-        <li><i style="border-top:3px solid #ff9800"></i>Fractura del relieve <b>norte-noreste</b>: la dirección de las fallas por donde subieron los fluidos de la esmeralda en Muzo y Coscuez (la que más pesa en el modelo)</li>
-        <li><i style="border-top:2px solid #00bcd4"></i>Fractura del relieve <b>noroeste</b>: la dirección de muchas vetas</li>
-        <li><i style="border-top:2px solid #9e9e9e"></i>Fractura del relieve en otra dirección (valle o quiebre recto detectado en el modelo del terreno)</li>
+        <li><i style="border-top:3px dashed #111"></i><span><b>Falla</b> (negra punteada, con borde blanco): grieta grande donde la roca se partió. Por las fallas subió el agua caliente que formó la esmeralda.</span></li>
+        <li><i style="border-top:3px solid #ffb300"></i><span><b>Fractura del terreno</b> (amarilla): valle o quiebre recto en la dirección de las fallas de la esmeralda (norte-noreste). La encontró el programa en la forma del terreno.</span></li>
+        <li><i style="border-top:4px solid #00b8d4"></i><span><b>Cresta de pliegue</b> (celeste): donde las capas de roca se doblan hacia arriba y se raja la roca.</span></li>
       </ul>
       <h3>Bajo tierra</h3>
       <p>Donde la Formación Capotes cubre a la Formación Muzo (sobre todo en Muzo, Quípama y Maripí), la app estima a qué
@@ -119,7 +120,7 @@
       <p>Puede <b>instalar</b> la app desde el menú del navegador (“Agregar a la pantalla de inicio”) y usarla <b>sin
         señal</b>: guarda los datos y las partes del mapa que ya vio; en “Municipios” puede guardar los datos de un
         municipio antes de salir. Al tocar un punto puede <b>descargar un archivo GPX</b> con el punto, las áreas y
-        las franjas cercanas para abrirlo en OsmAnd, Locus Map, Google Earth o un GPS Garmin.</p>
+        los sitios para buscar cercanos para abrirlo en OsmAnd, Locus Map, Google Earth o un GPS Garmin.</p>
       <h3>Cómo se hizo</h3>
       <p>El mapa divide la región en cuadros de 100 m. Para cada cuadro, un modelo estadístico compara la geología
         (sobre todo la Formación Muzo, la roca donde se forma la esmeralda), las fallas, los pliegues, las fracturas que se
