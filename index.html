@@ -32,6 +32,7 @@
   </div>
 </header>
 
+<div id="sin-senal" hidden>Sin señal · está usando lo que guardó en el celular</div>
 <main>
   <aside id="panel">
     <div class="sheet-handle" aria-hidden="true"></div>
@@ -43,27 +44,30 @@
     </nav>
 
     <section id="tab-buscar" class="tab-body active">
-      <label for="q" class="lbl">¿En qué pueblo o vereda está?</label>
+      <button id="ubicacion" class="btn primario grande"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>¿Qué hay donde estoy?</button>
+      <div class="o">o busque un lugar</div>
+      <label for="q" class="lbl sr-only">Buscar pueblo o vereda</label>
       <div class="search">
         <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="q" type="search" placeholder="Muzo, Otanche, Coscuez…" autocomplete="off">
+        <input id="q" type="search" placeholder="Nombre de su vereda o pueblo" autocomplete="off">
         <ul id="sugerencias" class="sugerencias" hidden></ul>
       </div>
-      <button id="ubicacion" class="btn"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>Usar mi ubicación</button>
       <p class="hint">También puede tocar cualquier punto del mapa.</p>
-      <p class="hint" id="aviso-zoom">Acérquese al mapa para ver los <b>corredores de exploración</b>, las fallas y los pliegues.</p>
+      <div class="consejo" id="consejo-senal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><path d="M12 19h.01"/><path d="M3 3l18 18"/></svg>
+        <div><b>¿Va al monte sin señal?</b> Antes de salir, busque su vereda o municipio y toque <b>Guardar para usar sin señal</b>.</div></div>
+      <p class="hint" id="aviso-zoom">Acérquese al mapa para ver las <b>franjas para recorrer</b>, las fallas y los pliegues.</p>
       <div id="detalle"></div>
     </section>
 
     <section id="tab-municipios" class="tab-body">
-      <p class="hint">Ordenados por área de potencial alto. Toque uno para acercarse.</p>
+      <p class="hint">Ordenados por área favorable. Toque uno para ver sus zonas y guardarlo para usar sin señal.</p>
       <ul id="lista-municipios" class="lista"></ul>
     </section>
 
     <section id="tab-campo" class="tab-body">
       <h3>Qué buscar en el terreno</h3>
       <p class="hint">Señales que acompañan a la esmeralda en el cinturón de Muzo y Coscuez, según los estudios geológicos
-        de la región. Ninguna sola es prueba; varias juntas en un corredor sí son buena señal.</p>
+        de la región. Ninguna sola es prueba; varias juntas en una franja sí son buena señal.</p>
       <ul class="guia">
         <li><b>Lutita negra</b> (roca oscura, en capas finas, que mancha los dedos) de la Formación Muzo o Paja. Es la roca donde se forma la esmeralda.</li>
         <li><b>Vetas blancas de calcita</b>, a veces con <b>dolomita</b> (tono crema) y <b>pirita</b> (cristales dorados, “oro de tontos”). Las vetas con esmeralda casi siempre van con calcita.</li>
@@ -73,11 +77,11 @@
         <li><b>Cresta de los pliegues</b> (donde las capas cambian de inclinación) y <b>cruces de fallas</b>: allí la roca se fractura y los fluidos circulan.</li>
         <li>Direcciones de vetas conocidas: más o menos <b>noroeste (N40°W)</b> y <b>norte-noreste (N10°E)</b>.</li>
       </ul>
-      <h3>Cómo usar los corredores</h3>
+      <h3>Cómo usar las franjas para recorrer</h3>
       <ol class="guia">
-        <li>Busque su vereda o use su ubicación y acérquese hasta ver los corredores (rosado = prioritario, amarillo = secundario).</li>
-        <li>Toque un corredor: la app dice por qué está marcado (pliegue, falla o cruce de fallas).</li>
-        <li>Recorra el corredor por quebradas y cortes de camino, donde la roca se ve sin vegetación, buscando las señales de arriba.</li>
+        <li>Busque su vereda o use su ubicación y acérquese hasta ver las franjas (rosado = prioritaria, amarillo = secundaria).</li>
+        <li>Toque una franja: la app dice por qué está marcada (pliegue, falla o cruce de fallas).</li>
+        <li>Recorra la franja por quebradas y cortes de camino, donde la roca se ve sin vegetación, buscando las señales de arriba.</li>
         <li>La capa “Profundidad de la Fm. Muzo” (menú de capas, arriba a la derecha) indica si la roca favorable está en superficie o enterrada.</li>
       </ol>
       <h3>Antes de excavar</h3>
@@ -91,7 +95,7 @@
     <section id="tab-ayuda" class="tab-body">
       <h3>Qué significan los colores</h3>
       <ul id="leyenda" class="leyenda"></ul>
-      <h3>Corredores de exploración</h3>
+      <h3>Franjas para recorrer</h3>
       <p>Al acercarse aparecen franjas a 30 m dentro de las zonas favorables: roca favorable (Fm. Muzo o Paja, o las
         formaciones vecinas a menos de 1 km) cerca de la <b>cresta de un pliegue</b>, de una <b>falla</b>, de un
         <b>cruce de fallas</b> o de una <b>fractura que se ve en el relieve</b> (valle o quiebre recto). Son
@@ -115,16 +119,16 @@
       <p>Puede <b>instalar</b> la app desde el menú del navegador (“Agregar a la pantalla de inicio”) y usarla <b>sin
         señal</b>: guarda los datos y las partes del mapa que ya vio; en “Municipios” puede guardar los datos de un
         municipio antes de salir. Al tocar un punto puede <b>descargar un archivo GPX</b> con el punto, las áreas y
-        los corredores cercanos para abrirlo en OsmAnd, Locus Map, Google Earth o un GPS Garmin.</p>
+        las franjas cercanas para abrirlo en OsmAnd, Locus Map, Google Earth o un GPS Garmin.</p>
       <h3>Cómo se hizo</h3>
       <p>El mapa divide la región en cuadros de 100 m. Para cada cuadro, un modelo estadístico compara la geología
         (sobre todo la Formación Muzo, la roca donde se forma la esmeralda), las fallas, los pliegues, las fracturas que se
         ven en el relieve y su dirección, la inclinación de las capas de roca, el relieve del terreno sin bosque (FABDEM), la vegetación vista desde satélite y la química de los sedimentos de las quebradas
         con lo que hay donde hoy existen minas de esmeralda. Al tocar un punto, la app dice qué es lo que más pesa allí.</p>
-      <p><b>“Potencial alto”</b> quiere decir que el cuadro se parece mucho a donde ya hay minas. <b>No garantiza</b> que
+      <p><b>“Favorable”</b> quiere decir que el cuadro se parece mucho a donde ya hay minas (en el estudio se llama «potencial alto»). <b>No garantiza</b> que
         haya esmeralda. La <b>confianza</b> dice qué tan seguro está el modelo.</p>
-      <p>En “áreas de potencial alto cercanas” solo se listan áreas de al menos 0,25 km².</p>
-      <p><b>“No evaluado”</b> es la Formación Rosablanca (tipo Peñas Blancas): ahí la esmeralda se forma de otra manera
+      <p>En “zonas favorables más cercanas” solo se listan áreas de al menos 0,25 km².</p>
+      <p><b>“Sin evaluar”</b> es la Formación Rosablanca (tipo Peñas Blancas): ahí la esmeralda se forma de otra manera
         y el modelo no sabe predecirla, así que no se afirma nada.</p>
       <p>El mapa <b>no muestra la ubicación de minas</b>. Es una versión preliminar de una tesis de Ciencia de Datos
         (Universidad Externado de Colombia) y todavía no incluye el conocimiento de los mineros.</p>

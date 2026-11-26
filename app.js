@@ -2,15 +2,35 @@
 // Página estática: lee los datos de data/ y no envía nada a ningún servidor.
 "use strict";
 
-const ZONAS_CORTAS = ["Potencial alto · confianza alta", "Potencial alto · confianza media", "Incierto",
-  "Potencial bajo · confianza media", "Potencial bajo · confianza alta", "No evaluado"];
+const ZONAS_CORTAS = ["Muy favorable", "Favorable", "No se sabe", "Poco favorable", "Nada favorable", "Sin evaluar"];
+// Resultado en una frase, para leer de un vistazo (y para escuchar)
+const VEREDICTO = [
+  "Aquí el terreno se parece mucho a donde hay minas de esmeralda.",
+  "Aquí el terreno se parece a donde hay minas, pero no es seguro.",
+  "Con lo que se sabe hoy, el mapa no puede decir si aquí es bueno o malo.",
+  "Aquí el terreno se parece poco a donde hay minas.",
+  "Con lo que se sabe hoy, aquí es poco probable encontrar esmeralda.",
+  "Aquí la roca es de tipo Peñas Blancas: el mapa no sabe evaluarla.",
+];
+// Términos técnicos de las explicaciones → palabras de mina
+const SENCILLO = [
+  [/la roca donde se forma la esmeralda \(Formación Muzo o Paja\)/g, "la tierra negra donde se forma la esmeralda (Formación Muzo)"],
+  [/las formaciones Capotes o Furatena, que tocan a la roca de la esmeralda/g, "las rocas que tocan a la tierra negra (Capotes o Furatena)"],
+  [/las formaciones que acompañan a la roca de la esmeralda/g, "las rocas que acompañan a la tierra negra"],
+  [/por las fallas subieron los fluidos que formaron la esmeralda/g, "por las fallas subió el agua caliente que formó la esmeralda"],
+  [/lejos de los caminos de los fluidos/g, "lejos de los caminos de esa agua"],
+  [/por donde pudieron subir los fluidos/g, "por donde pudo subir esa agua"],
+  [/por donde subieron los fluidos en Muzo y Coscuez/g, "por donde subió el agua que formó la esmeralda en Muzo y Coscuez"],
+  [/ \(albitización\)/g, ""],
+  [/la cresta de un pliegue \(anticlinal\)/g, "la cresta de un pliegue (donde las capas se doblan)"],
+];
 const EXPLICACION = [
-  "Se parece mucho a donde hoy hay minas de esmeralda, y el modelo está muy seguro.",
-  "Se parece a donde hay minas, pero el modelo está menos seguro.",
-  "Con la información actual el modelo no puede decidir.",
-  "Probablemente no es favorable, aunque el modelo no está del todo seguro.",
-  "Con lo que se sabe hoy, es poco probable que sea favorable.",
-  "Formación Rosablanca (tipo Peñas Blancas): el modelo no sabe evaluarla.",
+  "Se parece mucho a donde hoy hay minas de esmeralda, y el mapa está muy seguro.",
+  "Se parece a donde hay minas, pero el mapa está menos seguro.",
+  "Con la información actual el mapa no puede decidir.",
+  "Probablemente no es buen sitio, aunque el mapa no está del todo seguro.",
+  "Con lo que se sabe hoy, es poco probable que sea buen sitio.",
+  "Roca tipo Peñas Blancas (Formación Rosablanca): el mapa no sabe evaluarla.",
 ];
 const CRITERIOS = {
   C: "cerca de la cresta de un pliegue (anticlinal) en roca favorable",
@@ -45,6 +65,7 @@ const ZOOM_DETALLE = 13;   // desde aquí se muestran corredores y estructuras
 let D = {}, G = {};       // datos cargados y grilla decodificada
 let map, capaZonas, capaMunicipios, capaCorredores, capaEstructuras, capaTitulos, capaProf;
 let marcadorSel, circuloSel, capaCercanas;
+let textoVoz = "";        // lo que dice el botón «Escuchar»
 
 // ---------------------------------------------------------------- utilidades
 const $ = (s) => document.querySelector(s);
@@ -204,7 +225,7 @@ function iniciarMapa() {
   capaCercanas = L.layerGroup().addTo(map);
   const capas = {
     "Zonas de potencial": capaZonas,
-    "Corredores de exploración (de cerca)": capaCorredores,
+    "Franjas para recorrer (de cerca)": capaCorredores,
     "Fallas, pliegues y contactos (de cerca)": capaEstructuras,
     "Profundidad de la Fm. Muzo": capaProf,
     "Títulos mineros (ANM)": capaTitulos,
@@ -234,8 +255,8 @@ function iniciarMapa() {
   ley.onAdd = () => {
     const div = L.DomUtil.create("div", "leaflet-control leyenda-mapa");
     div.innerHTML = ZONAS_CORTAS.map((n, z) => `<div><i style="background:${color(z)}"></i>${n}</div>`).join("") +
-      `<div class="sep"></div><div><i style="background:${ESTILO_CORREDOR.prioritario.fillColor};border-color:${ESTILO_CORREDOR.prioritario.color}"></i>Corredor prioritario</div>` +
-      `<div><i style="background:${ESTILO_CORREDOR.secundario.fillColor};border-color:${ESTILO_CORREDOR.secundario.color}"></i>Corredor secundario</div>`;
+      `<div class="sep"></div><div><i style="background:${ESTILO_CORREDOR.prioritario.fillColor};border-color:${ESTILO_CORREDOR.prioritario.color}"></i>Franja prioritaria para recorrer</div>` +
+      `<div><i style="background:${ESTILO_CORREDOR.secundario.fillColor};border-color:${ESTILO_CORREDOR.secundario.color}"></i>Franja secundaria para recorrer</div>`;
     return div;
   };
   ley.addTo(map);
@@ -267,9 +288,9 @@ function cajaCorredor(lat, lon) {
   if (!fs.length) return "";
   const p = fs.sort((a, b) => (a.properties.tipo === "prioritario" ? -1 : 1))[0].properties;
   const razones = Object.keys(CRITERIOS).filter((k) => p[k]).map((k) => `<li>${CRITERIOS[k]}</li>`).join("");
-  return `<div class="caja corredor ${p.tipo}"><h3>Corredor ${p.tipo} de exploración</h3>` +
-    `<div>Franja de roca favorable (Fm. Muzo o Paja, o las formaciones vecinas a menos de 1 km de ellas) que además está:</div><ul>${razones}</ul>` +
-    `<div class="hint">Es una franja para recorrer y buscar señales en el terreno (vea “Guía de campo”), no un punto exacto: la geología de base es 1:100.000 (error de 50 a 100 m).</div></div>`;
+  return `<div class="caja corredor ${p.tipo}"><h3>Está en una franja ${p.tipo === "prioritario" ? "prioritaria" : "secundaria"} para recorrer</h3>` +
+    `<div>Franja de tierra negra (o de las rocas vecinas a menos de 1 km) que además está:</div><ul>${razones}</ul>` +
+    `<div class="hint">Recórrala por quebradas y cortes de camino buscando las señales de la “Guía de campo”. Es una franja, no un punto exacto (error de 50 a 100 m).</div></div>`;
 }
 function cajaProfundidad(i) {
   if (i < 0 || G.prof[i] === 255) return "";
@@ -330,8 +351,10 @@ function percentil(v, x) {
   return Math.round((k / (p.length - 1)) * 100);
 }
 function frase(v, x, c) {
-  if (v.tipo === "roca") return `Está sobre ${fmtValor(v, x).replace(/^Formación/, "la Formación")}`;
-  return (c > 0 ? v.favor : v.contra).replace("{v}", fmtValor(v, x));
+  let t = v.tipo === "roca" ? `Está sobre ${fmtValor(v, x).replace(/^Formación/, "la Formación")}`
+    : (c > 0 ? v.favor : v.contra).replace("{v}", fmtValor(v, x));
+  for (const [re, r] of SENCILLO) t = t.replace(re, r);
+  return t;
 }
 async function explicar(i, ctx) {
   const caja = document.getElementById("porque");
@@ -341,17 +364,19 @@ async function explicar(i, ctx) {
   if (!d) { caja.innerHTML = `<h3>¿Por qué?</h3><div class="hint">No hay explicación disponible para este cuadro.</div>`; return; }
   const items = D.explica.variables.map((v, k) => ({ v, x: valorReal(v, d.val[k]), c: d.con[k] }))
     .filter((o) => o.x !== null && !o.v.contrario && Math.abs(o.c) >= 0.1);
-  const favor = items.filter((o) => o.c > 0).sort((a, b) => b.c - a.c).slice(0, 3);
-  const contra = items.filter((o) => o.c < 0).sort((a, b) => a.c - b.c).slice(0, 3);
+  const favor = items.filter((o) => o.c > 0).sort((a, b) => b.c - a.c).slice(0, 2);
+  const contra = items.filter((o) => o.c < 0).sort((a, b) => a.c - b.c).slice(0, 2);
   const z = G.z[i];
-  const intro = z <= 1 ? "Puede haber esmeraldas porque este cuadro se parece a donde hay minas en lo siguiente:"
-    : z >= 3 ? "Es poco probable que haya esmeraldas: este cuadro se parece poco a donde hay minas."
-    : "El modelo no se decide: hay razones a favor y en contra.";
+  const intro = z <= 1 ? "Se parece a donde hay minas en esto:"
+    : z >= 3 ? "Se parece poco a donde hay minas:"
+    : "Hay cosas que ayudan y cosas que no:";
   const lista = (arr, cls) => arr.length ? `<ul class="porque ${cls}">${arr.map((o) => `<li>${esc(frase(o.v, o.x, o.c))}</li>`).join("")}</ul>` : `<div class="hint">Nada importante.</div>`;
   caja.innerHTML = `<h3>¿Por qué?</h3><div>${intro}</div>` +
-    (z >= 3 ? `<div class="sub contra">En contra</div>${lista(contra, "contra")}<div class="sub favor">A favor</div>${lista(favor, "favor")}`
-      : `<div class="sub favor">A favor</div>${lista(favor, "favor")}<div class="sub contra">En contra</div>${lista(contra, "contra")}`) +
-    `<button class="btn" id="ver-detalle">Ver explicación detallada</button>`;
+    (z >= 3 ? `<div class="sub contra">Lo que no ayuda</div>${lista(contra, "contra")}<div class="sub favor">Lo que ayuda</div>${lista(favor, "favor")}`
+      : `<div class="sub favor">Lo que ayuda</div>${lista(favor, "favor")}<div class="sub contra">Lo que no ayuda</div>${lista(contra, "contra")}`) +
+    `<button class="link" id="ver-detalle">Ver la explicación completa (técnica)</button>`;
+  const prim = (z >= 3 ? contra : favor).map((o) => frase(o.v, o.x, o.c));
+  if (prim.length) textoVoz += " " + intro + " " + prim.join(". ") + ".";
   document.getElementById("ver-detalle").addEventListener("click", () => detalle(i, d, ctx));
 }
 function barraEfecto(c) {
@@ -447,21 +472,21 @@ async function guardarMunicipio(f, boton) {
   for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) urls.push(`data/detalle/${r}_${c}.json`);
   let ok = 0;
   for (const u of urls) { try { const res = await fetch(u); if (res.ok) ok++; } catch (_) {} boton.textContent = `Guardando… ${ok}/${urls.length}`; }
-  boton.textContent = `✓ Datos guardados (${ok} bloques). El mapa base solo queda guardado en las partes que ya vio.`;
+  boton.textContent = `✓ Guardado. Sin señal verá las zonas y las explicaciones; las fotos del satélite solo donde ya miró.`;
   boton.disabled = true;
 }
 
 // ---------------------------------------------------------------- tutorial (primera visita)
 function tutorial() {
   let visto = false;
-  try { visto = localStorage.getItem("tutorial_v2") === "1"; } catch (_) {}
+  try { visto = localStorage.getItem("tutorial_v3") === "1"; } catch (_) {}
   if (visto) return;
   const pasos = [
     ["Bienvenido", "Esta es una <b>guía de exploración</b>: muestra dónde el terreno se parece a donde hoy hay minas de esmeralda. No garantiza que haya esmeralda."],
-    ["Colores", "<b>Rojo</b>: potencial alto. <b>Azul</b>: potencial bajo. <b>Gris</b>: el modelo no se decide. Mientras más intenso, más seguro está el modelo."],
-    ["Busque su vereda", "Escriba el nombre de su pueblo o vereda, o use <b>Usar mi ubicación</b>. Toque cualquier punto para saber <b>por qué</b> puede haber o no esmeralda allí."],
-    ["Acérquese", "De cerca aparecen los <b>corredores</b> (rosado y amarillo): franjas de roca favorable junto a fallas, pliegues y fracturas. Son los lugares para recorrer primero."],
-    ["En el campo", "Puede <b>instalar</b> la app en el celular, usarla <b>sin señal</b> en lo que ya vio, y <b>descargar los corredores para su GPS</b>. Revise siempre los títulos mineros antes de trabajar."],
+    ["Colores", "<b>Rojo</b>: favorable, se parece a donde hay minas. <b>Azul</b>: poco favorable. <b>Gris</b>: no se sabe. Mientras más fuerte el color, más seguro está el mapa."],
+    ["¿Qué hay donde estoy?", "Toque el botón verde <b>¿Qué hay donde estoy?</b> o escriba el nombre de su vereda. También puede tocar cualquier punto del mapa. La app le dice en una frase si ese sitio es favorable y <b>por qué</b>."],
+    ["Acérquese", "De cerca aparecen las <b>franjas para recorrer</b> (rosado y amarillo): tierra negra junto a fallas, pliegues y fracturas. Son los lugares para buscar primero."],
+    ["Sin señal", "Antes de salir al monte, busque su municipio o vereda y toque <b>Guardar para usar sin señal</b>. Revise siempre los títulos mineros antes de trabajar."],
   ];
   let k = 0;
   const div = document.createElement("div");
@@ -472,7 +497,7 @@ function tutorial() {
     div.querySelector("#tut-saltar").onclick = cerrar;
     div.querySelector("#tut-sig").onclick = () => { if (k < pasos.length - 1) { k++; pintar(); } else cerrar(); };
   };
-  const cerrar = () => { div.remove(); try { localStorage.setItem("tutorial_v2", "1"); } catch (_) {} };
+  const cerrar = () => { div.remove(); try { localStorage.setItem("tutorial_v3", "1"); } catch (_) {} };
   pintar(); document.body.appendChild(div);
 }
 
@@ -493,53 +518,98 @@ function seleccionar(lat, lon, titulo, subtitulo = "") {
   const enRadio = todas.filter((a) => a.d <= RADIO_KM);
   cerca.forEach((a, k) => marcadorNumero(a.latC, a.lonC, k + 1, `Área ${k + 1}: ${dondeTxt(a)}`));
 
+  const z = i >= 0 ? G.z[i] : -1;
+  const mun = buscarEn(D.municipios, lat, lon)[0];
+  const enTitulo = i >= 0 && buscarEn(D.titulos, lat, lon).length > 0;
+  textoVoz = `${titulo}. ${z >= 0 ? ZONAS_CORTAS[z] + ". " + VEREDICTO[z] : "Este punto está fuera del área estudiada."}`;
+
+  // 1. Resultado en una frase
   let html = `<h2>${esc(titulo)}</h2>${subtitulo ? `<div class="hint">${esc(subtitulo)}</div>` : ""}`;
-  html += `<div class="coords">${lat.toFixed(5)}, ${lon.toFixed(5)} · <a href="https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}" target="_blank" rel="noopener">abrir en Google Maps</a> · <a href="#" id="compartir">compartir este punto</a></div>`;
-  const cu = cuadroEncuesta(lat, lon);
-  if (cu) html += `<div class="hint">Mapa de la encuesta: hoja <b>${cu.hoja}</b>, cuadro columna <b>${cu.col}</b>, fila <b>${cu.fila}</b></div>`;
+  html += z >= 0
+    ? `<div class="veredicto" style="--zc:${color(z)}"><div class="veredicto-etq">${ZONAS_CORTAS[z]}</div>` +
+      `<div class="veredicto-txt">${VEREDICTO[z]}</div><div class="veredicto-nota">Es una guía: no garantiza que haya esmeralda.</div></div>`
+    : `<div class="caja">Este punto está fuera del área estudiada.</div>`;
+
+  // 2. Acciones rápidas
+  const urlPunto = `${location.origin}${location.pathname}#${lat.toFixed(5)},${lon.toFixed(5)}`;
+  const msgWA = `Guía de exploración esmeraldífera · ${titulo}: ${z >= 0 ? ZONAS_CORTAS[z] + ". " + VEREDICTO[z] : ""} Véalo en el mapa: ${urlPunto}`;
+  html += `<div class="acciones">
+    <button class="accion" id="escuchar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg><span>Escuchar</span></button>
+    <a class="accion" href="https://wa.me/?text=${encodeURIComponent(msgWA)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1.3-3.9A8 8 0 1 1 8 19.1z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 .8a4 4 0 0 1-2-2l.8-1-1-2z"/></svg><span>WhatsApp</span></a>
+    <a class="accion" href="https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(6)},${lon.toFixed(6)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 20l8-4 8 4z"/></svg><span>Cómo llegar</span></a>
+  </div>`;
+
+  // 3. Por qué (corto)
+  if (i >= 0 && z !== 5) html += `<div class="caja" id="porque"><h3>¿Por qué?</h3><div class="hint">Cargando…</div></div>`;
+  // Lo legal va siempre a la vista cuando aplica
+  if (enTitulo) html += cajaTitulo(lat, lon);
+  // 4. Hacia dónde caminar
   const corr = corredorCercano(lat, lon);
-  html += cajaPunto(i) + (i >= 0 && G.z[i] !== 5 ? `<div class="caja" id="porque"><h3>¿Por qué?</h3><div class="hint">Cargando la explicación…</div></div>` : "") +
-    cajaCorredor(lat, lon) + cajaProfundidad(i);
+  if (corr) html += `<div class="caja"><h3>¿Hacia dónde camino?</h3>${corr.d < 0.03 ? "Está <b>dentro</b> de una franja prioritaria para recorrer." :
+    `La franja prioritaria más cercana está a <b>${fmtKm(corr.d)} al ${corr.dir}</b>.`}
+    <button class="btn" id="ir-corredor">Ver esa franja en el mapa</button></div>`;
+  html += cajaCorredor(lat, lon);
+  // 5. Sin señal
+  if (mun) html += `<button class="btn guardar" id="guardar-aqui"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Guardar ${esc(mun.properties.shapeName)} para usar sin señal</button>`;
+
+  // 6. Lo demás, plegado
+  const cu = cuadroEncuesta(lat, lon);
+  html += `<details class="mas"><summary>Más información</summary>`;
+  html += `<div class="coords">${lat.toFixed(5)}, ${lon.toFixed(5)} · <a href="https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}" target="_blank" rel="noopener">abrir en Google Maps</a> · <a href="#" id="compartir">copiar enlace</a></div>`;
+  if (cu) html += `<div class="hint">Mapa de la encuesta: hoja <b>${cu.hoja}</b>, cuadro columna <b>${cu.col}</b>, fila <b>${cu.fila}</b></div>`;
+  html += cajaPunto(i) + cajaProfundidad(i);
   html += `<div class="caja"><h3>A menos de ${RADIO_KM} km</h3>${barra(cont)}`;
   const alto = (cont[0] + cont[1]) * kmCelda;
   html += alto > 0
-    ? `<div>Hay <b>${fmtNum(alto)} km²</b> de potencial alto en ${enRadio.length} área(s).</div>`
-    : `<div>No hay zonas de potencial alto a menos de ${RADIO_KM} km.</div>`;
+    ? `<div>Hay <b>${fmtNum(alto)} km²</b> de zona favorable en ${enRadio.length} área(s).</div>`
+    : `<div>No hay zonas favorables a menos de ${RADIO_KM} km.</div>`;
   html += `</div>`;
   if (cerca.length) {
-    html += `<div class="caja"><h3>Áreas de potencial alto más cercanas</h3><ul class="cerca">` +
+    html += `<div class="caja"><h3>Zonas favorables más cercanas</h3><ul class="cerca">` +
       cerca.map((a, k) => `<li data-lat="${a.latC}" data-lon="${a.lonC}"><b>${k + 1}.</b> ${dondeTxt(a)}` +
         ` · ${fmtNum(a.km2)} km²${a.municipio ? ` · ${esc(a.municipio)}` : ""}` +
-        `<br><small class="hint">${a.confianza_alta_pct} % con confianza alta · toque para acercarse y ver los corredores</small></li>`).join("") + `</ul></div>`;
+        `<br><small class="hint">${a.confianza_alta_pct} % muy favorable · toque para ir y ver las franjas</small></li>`).join("") + `</ul></div>`;
   }
-  if (corr) html += `<div class="caja"><h3>¿Hacia dónde camino?</h3>${corr.d < 0.03 ? "Está <b>dentro</b> de un corredor prioritario." :
-    `El corredor prioritario más cercano está a <b>${fmtKm(corr.d)} al ${corr.dir}</b>.`}
-    <button class="btn" id="ir-corredor">Ver ese corredor</button></div>`;
-  if (i >= 0) html += cajaTitulo(lat, lon);
-  html += `<button class="btn" id="gpx">Descargar para GPS (punto, áreas y corredores cercanos)</button>`;
-  html += `<p class="hint">Recuerde: es una guía de exploración. “Potencial alto” significa que se parece a donde hay minas; no garantiza esmeralda.</p>`;
+  if (i >= 0 && !enTitulo) html += cajaTitulo(lat, lon);
+  html += `<button class="btn" id="gpx">Descargar para GPS (punto, zonas y franjas cercanas)</button></details>`;
   $("#detalle").innerHTML = html;
   $("#detalle").querySelectorAll(".cerca li").forEach((li) =>
     li.addEventListener("click", () => map.flyTo([+li.dataset.lat, +li.dataset.lon], 15)));
   history.replaceState(null, "", `#${lat.toFixed(5)},${lon.toFixed(5)}`);
   if (corr) $("#ir-corredor").addEventListener("click", () => map.flyTo([corr.lat, corr.lon], 16));
+  if (mun) $("#guardar-aqui").addEventListener("click", (e) => guardarMunicipio(mun, e.currentTarget));
   $("#gpx").addEventListener("click", () => descargarGPX(lat, lon, titulo, cerca));
+  $("#escuchar").addEventListener("click", (e) => hablar(e.currentTarget));
   $("#compartir").addEventListener("click", async (e) => {
     e.preventDefault();
-    const url = location.href, texto = `Punto en la guía de exploración esmeraldífera: ${ZONAS_CORTAS[i >= 0 ? G.z[i] : 2]}`;
-    if (navigator.share) { try { await navigator.share({ title: "Guía de exploración esmeraldífera", text: texto, url }); } catch (_) {} }
-    else { try { await navigator.clipboard.writeText(url); e.target.textContent = "enlace copiado"; } catch (_) { prompt("Copie este enlace:", url); } }
+    try { await navigator.clipboard.writeText(urlPunto); e.target.textContent = "enlace copiado"; } catch (_) { prompt("Copie este enlace:", urlPunto); }
   });
 
   map.flyTo([lat, lon], Math.max(map.getZoom(), 12), { duration: 0.8 });
   mostrarPanel();
+  // Llevar el panel al resultado (en el celular quedaba debajo del buscador)
+  setTimeout(() => { const pn = $("#panel"); pn.scrollTo({ top: $("#detalle").offsetTop - pn.offsetTop - 70, behavior: "smooth" }); }, 80);
   if (i >= 0 && G.z[i] !== 5) explicar(i, { lat, lon, titulo });
+}
+
+// ---------------------------------------------------------------- escuchar (voz del celular, funciona sin señal)
+function hablar(boton) {
+  const span = boton.querySelector("span");
+  if (!("speechSynthesis" in window)) { span.textContent = "No disponible"; return; }
+  if (speechSynthesis.speaking) { speechSynthesis.cancel(); span.textContent = "Escuchar"; return; }
+  const u = new SpeechSynthesisUtterance(textoVoz);
+  const voces = speechSynthesis.getVoices();
+  u.voice = voces.find((v) => v.lang === "es-CO") || voces.find((v) => v.lang.startsWith("es-4") || v.lang === "es-MX" || v.lang === "es-US") ||
+    voces.find((v) => v.lang.startsWith("es")) || null;
+  u.lang = u.voice ? u.voice.lang : "es-CO"; u.rate = 0.95;
+  u.onend = u.onerror = () => { span.textContent = "Escuchar"; };
+  span.textContent = "Detener"; speechSynthesis.speak(u);
 }
 
 // ---------------------------------------------------------------- buscador
 function iniciarBuscador() {
   const items = [
-    ...D.poblados.map((p) => ({ nombre: p.nombre, sub: `${p.tipo === "town" ? "Pueblo" : p.tipo === "village" ? "Vereda / caserío" : "Lugar"}${p.municipio ? " · " + p.municipio : ""}`, lat: p.lat, lon: p.lon })),
+    ...D.poblados.map((p) => ({ nombre: p.nombre, sub: `${p.tipo === "town" ? "Pueblo" : p.tipo === "vereda" ? "Vereda" : p.tipo === "village" || p.tipo === "hamlet" ? "Caserío" : "Lugar"}${p.municipio ? " · " + p.municipio : ""}`, lat: p.lat, lon: p.lon })),
     ...D.municipios.features.map((f) => {
       const c = L.geoJSON(f).getBounds().getCenter();
       return { nombre: f.properties.shapeName, sub: "Municipio", lat: c.lat, lon: c.lng, mun: f };
@@ -599,10 +669,10 @@ function seleccionarMunicipio(f) {
   html += `<div class="caja"><h3>Cómo se reparte el territorio</h3>${barra(km)}<ul class="leyenda">` +
     km.map((v, z) => v ? `<li><i style="background:${color(z)}"></i>${ZONAS_CORTAS[z]}: ${fmtNum(v)} km² (${Math.round((100 * v) / tot)} %)</li>` : "").join("") + `</ul></div>`;
   if (areas.length) {
-    html += `<div class="caja"><h3>Áreas de potencial alto más grandes</h3><ul class="cerca">` +
-      areas.map((a, k) => `<li data-lat="${a.lat}" data-lon="${a.lon}"><b>${k + 1}.</b> ${fmtNum(a.km2)} km² · ${a.confianza_alta_pct} % con confianza alta</li>`).join("") + `</ul></div>`;
+    html += `<div class="caja"><h3>Zonas favorables más grandes</h3><ul class="cerca">` +
+      areas.map((a, k) => `<li data-lat="${a.lat}" data-lon="${a.lon}"><b>${k + 1}.</b> ${fmtNum(a.km2)} km² · ${a.confianza_alta_pct} % muy favorable</li>`).join("") + `</ul></div>`;
   } else {
-    html += `<div class="caja">Este municipio no tiene áreas de potencial alto dentro del área estudiada.</div>`;
+    html += `<div class="caja">Este municipio no tiene zonas favorables dentro del área estudiada.</div>`;
   }
   html += `<button class="btn" id="guardar-mun">Guardar los datos de ${esc(p.shapeName)} para usar sin señal</button>`;
   $("#detalle").innerHTML = html;
@@ -616,7 +686,7 @@ function iniciarMunicipios() {
     (b.properties.km2_0 + b.properties.km2_1) - (a.properties.km2_0 + a.properties.km2_1));
   $("#lista-municipios").innerHTML = feats.map((f, k) => {
     const p = f.properties, km = [0, 1, 2, 3, 4, 5].map((z) => p[`km2_${z}`] || 0);
-    return `<li data-k="${k}"><b>${esc(p.shapeName)}</b>${barra(km)}<small>Potencial alto: ${fmtNum(km[0] + km[1])} km²</small></li>`;
+    return `<li data-k="${k}"><b>${esc(p.shapeName)}</b>${barra(km)}<small>Zona favorable: ${fmtNum(km[0] + km[1])} km²</small></li>`;
   }).join("");
   $("#lista-municipios").addEventListener("click", (e) => {
     const li = e.target.closest("li"); if (li) seleccionarMunicipio(feats[+li.dataset.k]);
@@ -646,6 +716,9 @@ async function main() {
   $("#cerrar-modal").addEventListener("click", () => { $("#modal").hidden = true; });
   $("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") $("#modal").hidden = true; });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("#modal").hidden = true; });
+  const senal = () => { $("#sin-senal").hidden = navigator.onLine; };
+  addEventListener("online", senal); addEventListener("offline", senal); senal();
+  if ("speechSynthesis" in window) speechSynthesis.getVoices();   // carga las voces con anticipación
   $("#cargando").remove();
   const m = location.hash.match(/^#(-?\d+\.?\d*),(-?\d+\.?\d*)$/);
   if (m) seleccionar(+m[1], +m[2], "Punto compartido");
