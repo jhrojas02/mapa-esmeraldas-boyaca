@@ -93,6 +93,8 @@ function capaCuadricula() {
   map.on("zoomend", verKm); g.on("add", verKm);
   return g;
 }
+const PIN = L.divIcon({ className: "pin", iconSize: [30, 40], iconAnchor: [15, 38],
+  html: `<svg viewBox="0 0 30 40" width="30" height="40" aria-hidden="true"><path d="M15 1C7.3 1 1 7.1 1 14.7 1 25 15 39 15 39s14-14 14-24.3C29 7.1 22.7 1 15 1z" fill="#0d6b50" stroke="#fff" stroke-width="2"/><path d="M15 7l6 5.2-6 10.3-6-10.3z" fill="#7ee2b8"/></svg>` });
 const centro = (i) => [G.x0 + ((i % G.W) + 0.5) * G.res, G.y0 - (Math.floor(i / G.W) + 0.5) * G.res];
 function indice(lat, lon) {
   const [x, y] = aXY(lat, lon);
@@ -166,7 +168,8 @@ async function cargar() {
 
 // ---------------------------------------------------------------- mapa
 function iniciarMapa() {
-  map = L.map("map", { zoomControl: true, preferCanvas: true, maxZoom: 19 });
+  map = L.map("map", { zoomControl: false, preferCanvas: true, maxZoom: 19 });
+  L.control.zoom({ position: "topright" }).addTo(map);
   const satelite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     { maxZoom: 19, maxNativeZoom: 18, attribution: "Imagen: Esri, Maxar, Earthstar Geographics" });
   const calles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -346,8 +349,8 @@ async function explicar(i, ctx) {
     : "El modelo no se decide: hay razones a favor y en contra.";
   const lista = (arr, cls) => arr.length ? `<ul class="porque ${cls}">${arr.map((o) => `<li>${esc(frase(o.v, o.x, o.c))}</li>`).join("")}</ul>` : `<div class="hint">Nada importante.</div>`;
   caja.innerHTML = `<h3>¿Por qué?</h3><div>${intro}</div>` +
-    (z >= 3 ? `<div class="sub contra">👎 En contra</div>${lista(contra, "contra")}<div class="sub favor">👍 A favor</div>${lista(favor, "favor")}`
-      : `<div class="sub favor">👍 A favor</div>${lista(favor, "favor")}<div class="sub contra">👎 En contra</div>${lista(contra, "contra")}`) +
+    (z >= 3 ? `<div class="sub contra">En contra</div>${lista(contra, "contra")}<div class="sub favor">A favor</div>${lista(favor, "favor")}`
+      : `<div class="sub favor">A favor</div>${lista(favor, "favor")}<div class="sub contra">En contra</div>${lista(contra, "contra")}`) +
     `<button class="btn" id="ver-detalle">Ver explicación detallada</button>`;
   document.getElementById("ver-detalle").addEventListener("click", () => detalle(i, d, ctx));
 }
@@ -456,7 +459,7 @@ function tutorial() {
   const pasos = [
     ["Bienvenido", "Esta es una <b>guía de exploración</b>: muestra dónde el terreno se parece a donde hoy hay minas de esmeralda. No garantiza que haya esmeralda."],
     ["Colores", "<b>Rojo</b>: potencial alto. <b>Azul</b>: potencial bajo. <b>Gris</b>: el modelo no se decide. Mientras más intenso, más seguro está el modelo."],
-    ["Busque su vereda", "Escriba el nombre de su pueblo o vereda, o use <b>📍 Usar mi ubicación</b>. Toque cualquier punto para saber <b>por qué</b> puede haber o no esmeralda allí."],
+    ["Busque su vereda", "Escriba el nombre de su pueblo o vereda, o use <b>Usar mi ubicación</b>. Toque cualquier punto para saber <b>por qué</b> puede haber o no esmeralda allí."],
     ["Acérquese", "De cerca aparecen los <b>corredores</b> (rosado y amarillo): franjas de roca favorable junto a fallas, pliegues y fracturas. Son los lugares para recorrer primero."],
     ["En el campo", "Puede <b>instalar</b> la app en el celular, usarla <b>sin señal</b> en lo que ya vio, y <b>descargar los corredores para su GPS</b>. Revise siempre los títulos mineros antes de trabajar."],
   ];
@@ -479,7 +482,7 @@ function seleccionar(lat, lon, titulo, subtitulo = "") {
   if (marcadorSel) map.removeLayer(marcadorSel);
   if (circuloSel) map.removeLayer(circuloSel);
   capaCercanas.clearLayers();
-  marcadorSel = L.marker([lat, lon]).addTo(map);
+  marcadorSel = L.marker([lat, lon], { icon: PIN }).addTo(map);
   circuloSel = L.circle([lat, lon], { radius: RADIO_KM * 1000, color: "#fff", weight: 2, dashArray: "6 6", fill: false, interactive: false }).addTo(map);
 
   const i = indice(lat, lon);
@@ -513,7 +516,7 @@ function seleccionar(lat, lon, titulo, subtitulo = "") {
     `El corredor prioritario más cercano está a <b>${fmtKm(corr.d)} al ${corr.dir}</b>.`}
     <button class="btn" id="ir-corredor">Ver ese corredor</button></div>`;
   if (i >= 0) html += cajaTitulo(lat, lon);
-  html += `<button class="btn" id="gpx">⬇ Descargar para GPS (punto, áreas y corredores cercanos)</button>`;
+  html += `<button class="btn" id="gpx">Descargar para GPS (punto, áreas y corredores cercanos)</button>`;
   html += `<p class="hint">Recuerde: es una guía de exploración. “Potencial alto” significa que se parece a donde hay minas; no garantiza esmeralda.</p>`;
   $("#detalle").innerHTML = html;
   $("#detalle").querySelectorAll(".cerca li").forEach((li) =>
@@ -570,10 +573,12 @@ function iniciarBuscador() {
 
   $("#ubicacion").addEventListener("click", () => {
     if (!navigator.geolocation) { alertaDetalle("Este navegador no permite obtener la ubicación."); return; }
-    $("#ubicacion").textContent = "Buscando su ubicación…";
+    const btnUb = $("#ubicacion"), original = btnUb.innerHTML;
+    btnUb.textContent = "Buscando su ubicación…"; btnUb.disabled = true;
+    const restaurar = () => { btnUb.innerHTML = original; btnUb.disabled = false; };
     navigator.geolocation.getCurrentPosition(
-      (p) => { $("#ubicacion").textContent = "📍 Usar mi ubicación"; seleccionar(p.coords.latitude, p.coords.longitude, "Su ubicación"); },
-      () => { $("#ubicacion").textContent = "📍 Usar mi ubicación"; alertaDetalle("No fue posible obtener la ubicación. Revise los permisos del navegador o busque su pueblo por nombre."); },
+      (p) => { restaurar(); seleccionar(p.coords.latitude, p.coords.longitude, "Su ubicación"); },
+      () => { restaurar(); alertaDetalle("No fue posible obtener la ubicación. Revise los permisos del navegador o busque su pueblo por nombre."); },
       { enableHighAccuracy: true, timeout: 15000 });
   });
 }
@@ -599,7 +604,7 @@ function seleccionarMunicipio(f) {
   } else {
     html += `<div class="caja">Este municipio no tiene áreas de potencial alto dentro del área estudiada.</div>`;
   }
-  html += `<button class="btn" id="guardar-mun">📥 Guardar los datos de ${esc(p.shapeName)} para usar sin señal</button>`;
+  html += `<button class="btn" id="guardar-mun">Guardar los datos de ${esc(p.shapeName)} para usar sin señal</button>`;
   $("#detalle").innerHTML = html;
   $("#detalle").querySelectorAll(".cerca li").forEach((li) =>
     li.addEventListener("click", () => map.flyTo([+li.dataset.lat, +li.dataset.lon], 15)));

@@ -4,38 +4,52 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Guía de exploración esmeraldífera · Occidente de Boyacá</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0b6e4f">
+<meta name="theme-color" content="#063b2c">
+<meta name="description" content="Mapa de zonas favorables para la exploración de esmeraldas en el occidente de Boyacá. Tesis de Ciencia de Datos, Universidad Externado de Colombia.">
 <link rel="icon" href="icono.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icono.svg">
 </head>
 <body>
-<header>
-  <div class="title">
-    <h1>Guía de exploración esmeraldífera</h1>
-    <p>Occidente de Boyacá · versión preliminar 3.1 (Modelo A)</p>
+<header class="topbar">
+  <div class="brand">
+    <img src="icono.svg" alt="" class="brand-mark" width="34" height="34">
+    <div class="title">
+      <h1>Guía de exploración esmeraldífera</h1>
+      <p>Cinturón esmeraldífero occidental · Boyacá</p>
+    </div>
   </div>
-  <button id="toggle-panel" aria-label="Mostrar u ocultar el panel">☰</button>
+  <div class="topbar-right">
+    <span class="badge" title="Modelo A: solo información pública; todavía no incluye el conocimiento de los mineros">Versión preliminar 3.1</span>
+    <button id="toggle-panel" class="icon-btn" aria-label="Mostrar u ocultar el panel">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
 </header>
 
 <main>
   <aside id="panel">
+    <div class="sheet-handle" aria-hidden="true"></div>
     <nav class="tabs" role="tablist">
-      <button class="tab active" data-tab="buscar">Buscar</button>
-      <button class="tab" data-tab="municipios">Municipios</button>
-      <button class="tab" data-tab="campo">Guía de campo</button>
-      <button class="tab" data-tab="ayuda">Cómo leer</button>
+      <button class="tab active" data-tab="buscar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Buscar</span></button>
+      <button class="tab" data-tab="municipios"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg><span>Municipios</span></button>
+      <button class="tab" data-tab="campo"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg><span>Guía de campo</span></button>
+      <button class="tab" data-tab="ayuda"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><span>Cómo leer</span></button>
     </nav>
 
     <section id="tab-buscar" class="tab-body active">
-      <label for="q" class="lbl">¿En qué pueblo o vereda vive?</label>
+      <label for="q" class="lbl">¿En qué pueblo o vereda está?</label>
       <div class="search">
-        <input id="q" type="search" placeholder="Ej.: Muzo, Otanche, Coscuez…" autocomplete="off">
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Muzo, Otanche, Coscuez…" autocomplete="off">
         <ul id="sugerencias" class="sugerencias" hidden></ul>
       </div>
-      <button id="ubicacion" class="btn">📍 Usar mi ubicación</button>
+      <button id="ubicacion" class="btn"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>Usar mi ubicación</button>
       <p class="hint">También puede tocar cualquier punto del mapa.</p>
       <p class="hint" id="aviso-zoom">Acérquese al mapa para ver los <b>corredores de exploración</b>, las fallas y los pliegues.</p>
       <div id="detalle"></div>
@@ -116,6 +130,7 @@
         (Universidad Externado de Colombia) y todavía no incluye el conocimiento de los mineros.</p>
       <p class="meta" id="meta"></p>
     </section>
+    <footer class="panel-footer">Tesis de Ciencia de Datos · Universidad Externado de Colombia</footer>
   </aside>
 
   <div id="map"></div>
@@ -123,7 +138,7 @@
 
 <div id="modal" hidden><div class="modal-caja" role="dialog" aria-modal="true">
   <button id="cerrar-modal" aria-label="Cerrar">✕</button><div id="modal-cuerpo"></div></div></div>
-<div id="cargando">Cargando el mapa…</div>
+<div id="cargando"><div class="splash"><img src="icono.svg" alt="" width="64" height="64"><div class="splash-title">Guía de exploración esmeraldífera</div><div class="spinner" aria-hidden="true"></div><div class="splash-sub">Cargando el mapa…</div></div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
